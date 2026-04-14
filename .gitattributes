@@ -1,0 +1,10 @@
+# Normalize line endings to LF on commit, checkout as-is
+* text=auto eol=lf
+
+# Force binary treatment for these types
+*.db    binary
+*.db-shm binary
+*.db-wal binary
+*.png   binary
+*.jpg   binary
+*.ico   binary
