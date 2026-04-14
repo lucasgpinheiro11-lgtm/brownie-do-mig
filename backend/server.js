@@ -470,6 +470,10 @@ app.post('/api/restore', (req, res) => {
 });
 
 // ─────────────────────────────────────────────────────────────────────────────
+app.get('/', (req, res) => {
+  res.send('🍫 API Brownie do Mig rodando ONLINE 🚀');
+});
+
 app.listen(PORT, () => {
   console.log(`\n🍫 Brownie do Mig — Backend em http://localhost:${PORT}\n`);
 });
