@@ -118,9 +118,18 @@ async function dispararUnica(db, orderId) {
   const phone     = formatPhone(order.phone);
   if (!phone)     throw new Error('Telefone inválido');
 
-  const dias     = daysPast(order.date);
-  const tmpl     = await getTemplate(db, order.status, dias);
-  if (!tmpl) throw new Error(`Nenhuma regra de cobrança configurada para "${order.status}" com ${dias} dia(s) de atraso. Configure em Mensagens WA → 🔔 Automático.`);
+  const dias = daysPast(order.date);
+
+  // Deriva o status efetivo igual ao autoClassify do server.js
+  // (o status salvo no banco pode ser 'confirmado' enquanto a data já venceu)
+  let effectiveStatus = order.status;
+  if (!['pago', 'cancelado', 'novo'].includes(order.status) && order.date) {
+    if (dias > 0) effectiveStatus = 'vencido';
+    else          effectiveStatus = 'avencer';
+  }
+
+  const tmpl = await getTemplate(db, effectiveStatus, dias);
+  if (!tmpl) throw new Error(`Nenhuma regra de cobrança configurada para "${effectiveStatus}" com ${dias} dia(s) de atraso. Configure em Mensagens WA → 🔔 Automático.`);
 
   const pixKey = await getPixKey(db);
   const { rows: salesRows } = await db.execute({ sql: 'SELECT * FROM sales WHERE order_id=? ORDER BY date ASC', args: [orderId] });
@@ -147,7 +156,8 @@ async function dispararTodas(db) {
 
   const today  = todayStr();
   const pixKey = await getPixKey(db);
-  const { rows: orders } = await db.execute(`SELECT * FROM orders WHERE status IN ('vencido','avencer') AND total>0 AND phone IS NOT NULL AND phone!=''`);
+  // Inclui 'confirmado' pois o autoClassify pode não ter persistido o status no banco
+  const { rows: orders } = await db.execute(`SELECT * FROM orders WHERE status IN ('vencido','avencer','confirmado') AND total>0 AND phone IS NOT NULL AND phone!='' AND date IS NOT NULL`);
 
   // Busca todas as sales de uma vez e agrupa por order_id
   const { rows: allSales } = orders.length > 0
@@ -176,7 +186,15 @@ async function dispararTodas(db) {
     if (!phone) continue;
 
     const dias = daysPast(order.date);
-    const tmpl = await getTemplate(db, order.status, dias);
+    if (dias === 0) continue; // Ainda não venceu — pula
+
+    // Deriva status efetivo (igual ao autoClassify)
+    let effectiveStatus = order.status;
+    if (!['pago', 'cancelado', 'novo'].includes(order.status)) {
+      effectiveStatus = dias > 0 ? 'vencido' : 'avencer';
+    }
+
+    const tmpl = await getTemplate(db, effectiveStatus, dias);
     if (!tmpl) continue; // Sem regra configurada para este período — pula silenciosamente
 
     const mensagem = interpolate(tmpl.mensagem, order, dias, pixKey, salesMap[order.id] || []);
