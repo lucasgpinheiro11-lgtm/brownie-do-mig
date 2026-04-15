@@ -63,3 +63,8 @@ export const saveConfig = (data) => req('/config', { method:'POST', body: data }
 // Backup / Restore
 export const getBackup = ()     => req('/backup');
 export const restore   = (data) => req('/restore', { method:'POST', body: data });
+
+// Cobranças
+export const cobrarUnica  = (orderId) => req('/cobrancas/disparar', { method:'POST', body:{ orderId } });
+export const cobrarTodas  = ()        => req('/cobrancas/disparar', { method:'POST', body:{} });
+export const getCobrancas = ()        => req('/cobrancas/logs');

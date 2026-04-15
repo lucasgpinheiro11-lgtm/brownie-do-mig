@@ -27,8 +27,9 @@ export function Kanban() {
   const [showOrder,setShowOrder]= useState(false);
   const [editId,   setEditId]   = useState(null);
   const [pixOrder, setPixOrder] = useState(null);
-  const [dragId,   setDragId]   = useState(null);
-  const [dragOver, setDragOver] = useState(null);
+  const [dragId,    setDragId]    = useState(null);
+  const [dragOver,  setDragOver]  = useState(null);
+  const [cobrando,  setCobrando]  = useState(false);
 
   // ── Stats ─────────────────────────────────────────────────────────────────
   const todayStr = new Date().toISOString().split('T')[0];
@@ -102,6 +103,23 @@ export function Kanban() {
     toast('📱 Abrindo WhatsApp...');
   }
 
+  async function cobrarUm(id) {
+    try {
+      const r = await api.cobrarUnica(id);
+      toast(`✅ Cobrança enviada! (tentativa ${r.tentativa})`);
+    } catch (e) { toast('❌ ' + e.message); }
+  }
+
+  async function cobrarTodas() {
+    setCobrando(true);
+    try {
+      const r = await api.cobrarTodas();
+      if (r.skipped) { toast('⚠️ ' + r.skipped); return; }
+      toast(`✅ ${r.enviados} enviada(s)${r.falhas ? ` · ${r.falhas} falha(s)` : ''}`);
+    } catch (e) { toast('❌ ' + e.message); }
+    finally { setCobrando(false); }
+  }
+
   function openNew()        { setEditId(null); setShowOrder(true); }
   function openEdit(id)     { setEditId(id);   setShowOrder(true); }
   function exportCSV() {
@@ -128,6 +146,9 @@ export function Kanban() {
         <div className="si"><div className="sl" style={{color:'rgba(255,160,0,.8)'}}>Vencidos</div><div className="sv" style={{color:'#FFB74D'}}>{vencCount}</div></div>
         <div style={{ marginLeft:'auto', display:'flex', gap:7 }}>
           <button className="btn btn-sm btn-outline" style={{color:'rgba(255,255,255,.7)',borderColor:'rgba(255,255,255,.2)'}} onClick={exportCSV}>📥 CSV</button>
+          <button className="btn btn-sm" style={{background:'#25D366',color:'#fff',border:'none'}} onClick={cobrarTodas} disabled={cobrando}>
+            {cobrando ? 'Enviando...' : '🔔 Cobrar todos'}
+          </button>
           <button className="btn btn-gold btn-sm" onClick={openNew}>+ Nova Conta</button>
         </div>
       </div>
@@ -176,6 +197,7 @@ export function Kanban() {
                       onMarkPaid={() => markPaid(o.id)}
                       onPix={() => setPixOrder(o)}
                       onWA={() => sendWA(o)}
+                      onCobrar={() => cobrarUm(o.id)}
                     />
                   ))}
                 </div>
@@ -192,7 +214,7 @@ export function Kanban() {
 }
 
 // ── Kanban Card ───────────────────────────────────────────────────────────────
-function KanbanCard({ order: o, onDragStart, onEdit, onDelete, onMarkPaid, onPix, onWA }) {
+function KanbanCard({ order: o, onDragStart, onEdit, onDelete, onMarkPaid, onPix, onWA, onCobrar }) {
   const pc = PAYMENT_COLORS[o.payment] || ['#f5f5f5','#555'];
   const payLbl = PAYMENT_LABELS[o.payment] || o.payment;
   const d = daysDiff(o.date);
@@ -257,6 +279,9 @@ function KanbanCard({ order: o, onDragStart, onEdit, onDelete, onMarkPaid, onPix
 
       <div className="cacts">
         <button className="ca ca-wa"  onClick={onWA}>📱 WA</button>
+        {['vencido','avencer'].includes(o.status) && (
+          <button className="ca" style={{background:'#E8F5E9',color:'#2E7D32'}} onClick={onCobrar}>🔔 Cobrar</button>
+        )}
         {o.payment === 'pix' && o.status !== 'pago' && (
           <button className="ca ca-pix" onClick={onPix}>🔵 Pix</button>
         )}

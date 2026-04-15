@@ -1,9 +1,10 @@
 // Node 22+ built-in SQLite — no native build needed
 const { DatabaseSync } = require('node:sqlite');
-const express = require('express');
-const cors = require('cors');
-const jwt = require('jsonwebtoken');
-const path = require('path');
+const express  = require('express');
+const cors     = require('cors');
+const jwt      = require('jsonwebtoken');
+const path     = require('path');
+const cobranca = require('./cobranca.js');
 
 // ── AUTH ──────────────────────────────────────────────────────────────────────
 const JWT_SECRET  = process.env.JWT_SECRET  || 'brownie-do-mig-secret-2025';
@@ -126,6 +127,15 @@ db.exec(`
   CREATE TABLE IF NOT EXISTS config (
     key   TEXT PRIMARY KEY,
     value TEXT DEFAULT ''
+  );
+
+  CREATE TABLE IF NOT EXISTS cobrancas_log (
+    id          TEXT PRIMARY KEY,
+    order_id    TEXT NOT NULL,
+    mensagem    TEXT DEFAULT '',
+    status      TEXT DEFAULT 'enviado',
+    created_at  INTEGER DEFAULT 0,
+    tentativa   INTEGER DEFAULT 1
   );
 `);
 
@@ -470,6 +480,33 @@ app.post('/api/restore', (req, res) => {
       db.exec('ROLLBACK');
       throw inner;
     }
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// ── COBRANÇAS ─────────────────────────────────────────────────────────────────
+app.post('/api/cobrancas/disparar', async (req, res) => {
+  try {
+    const { orderId } = req.body;
+    if (orderId) {
+      const result = await cobranca.dispararUnica(db, orderId);
+      res.json(result);
+    } else {
+      const result = await cobranca.dispararTodas(db);
+      res.json(result);
+    }
+  } catch (e) { res.status(400).json({ error: e.message }); }
+});
+
+app.get('/api/cobrancas/logs', (_, res) => {
+  try {
+    const logs = db.prepare(`
+      SELECT cl.*, o.name as order_name, o.phone as order_phone
+      FROM cobrancas_log cl
+      LEFT JOIN orders o ON o.id = cl.order_id
+      ORDER BY cl.created_at DESC
+      LIMIT 200
+    `).all();
+    res.json(logs);
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
