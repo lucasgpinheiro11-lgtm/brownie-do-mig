@@ -68,3 +68,8 @@ export const restore   = (data) => req('/restore', { method:'POST', body: data }
 export const cobrarUnica  = (orderId) => req('/cobrancas/disparar', { method:'POST', body:{ orderId } });
 export const cobrarTodas  = ()        => req('/cobrancas/disparar', { method:'POST', body:{} });
 export const getCobrancas = ()        => req('/cobrancas/logs');
+
+// Templates de cobrança
+export const getCobrancaTemplates    = ()       => req('/cobranca-templates');
+export const createCobrancaTemplate  = (data)   => req('/cobranca-templates',      { method:'POST',   body: data });
+export const deleteCobrancaTemplate  = (id)     => req(`/cobranca-templates/${id}`, { method:'DELETE' });

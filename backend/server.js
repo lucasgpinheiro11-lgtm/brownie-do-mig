@@ -396,6 +396,37 @@ app.post('/api/restore', async (req, res) => {
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
+// ── TEMPLATES DE COBRANÇA ─────────────────────────────────────────────────────
+app.get('/api/cobranca-templates', async (_, res) => {
+  try {
+    const { rows } = await db.execute('SELECT * FROM cobranca_templates ORDER BY status, dias_min');
+    res.json(rows);
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+app.post('/api/cobranca-templates', async (req, res) => {
+  try {
+    const { status, dias_min, dias_max, mensagem } = req.body;
+    if (!status || !mensagem || dias_min == null) return res.status(400).json({ error: 'Campos obrigatórios' });
+    if (!['vencido','avencer'].includes(status)) return res.status(400).json({ error: 'Status inválido' });
+    // Verifica sobreposição de período
+    const { rows: [ov] } = await db.execute({
+      sql:  `SELECT COUNT(*) as c FROM cobranca_templates WHERE status=? AND dias_min<=COALESCE(?,9999) AND COALESCE(dias_max,9999)>=?`,
+      args: [status, dias_max ?? null, +dias_min],
+    });
+    if (Number(ov.c) > 0) return res.status(400).json({ error: 'Já existe uma regra que cobre esse período para este status.' });
+    const id = uid('ct');
+    await db.execute({ sql: `INSERT INTO cobranca_templates (id,status,dias_min,dias_max,mensagem) VALUES (?,?,?,?,?)`, args: [id, status, +dias_min, dias_max != null ? +dias_max : null, mensagem] });
+    const { rows } = await db.execute({ sql: 'SELECT * FROM cobranca_templates WHERE id=?', args: [id] });
+    res.json(rows[0]);
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+app.delete('/api/cobranca-templates/:id', async (req, res) => {
+  try { await db.execute({ sql: 'DELETE FROM cobranca_templates WHERE id=?', args: [req.params.id] }); res.json({ ok: true }); }
+  catch (e) { res.status(500).json({ error: e.message }); }
+});
+
 // ── COBRANÇAS ─────────────────────────────────────────────────────────────────
 app.post('/api/cobrancas/disparar', async (req, res) => {
   try {
@@ -433,6 +464,7 @@ async function initDB() {
     { sql: `CREATE TABLE IF NOT EXISTS funnel_days (id TEXT PRIMARY KEY, date TEXT UNIQUE NOT NULL, alcance INTEGER DEFAULT 0, interesse INTEGER DEFAULT 0, intencao INTEGER DEFAULT 0, compra INTEGER DEFAULT 0, recompra INTEGER DEFAULT 0, notes TEXT DEFAULT '')` },
     { sql: `CREATE TABLE IF NOT EXISTS config (key TEXT PRIMARY KEY, value TEXT DEFAULT '')` },
     { sql: `CREATE TABLE IF NOT EXISTS cobrancas_log (id TEXT PRIMARY KEY, order_id TEXT NOT NULL, mensagem TEXT DEFAULT '', status TEXT DEFAULT 'enviado', created_at INTEGER DEFAULT 0, tentativa INTEGER DEFAULT 1)` },
+    { sql: `CREATE TABLE IF NOT EXISTS cobranca_templates (id TEXT PRIMARY KEY, status TEXT NOT NULL, dias_min INTEGER NOT NULL DEFAULT 1, dias_max INTEGER, mensagem TEXT NOT NULL DEFAULT '')` },
   ], 'write');
 
   const { rows } = await db.execute('SELECT COUNT(*) as c FROM insumos');

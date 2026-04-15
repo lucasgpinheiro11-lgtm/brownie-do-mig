@@ -9,12 +9,8 @@ function uid() { return 'cb' + Date.now() + Math.random().toString(36).slice(2, 
 function todayStr() { return new Date().toISOString().split('T')[0]; }
 
 function formatPhone(phone) {
-  const d = (phone || '')
-    .replace(/\D/g, '')
-    .replace(/^0/, '')
-    .replace(/^55/, '');
-  if (!d) return null;
-  return `55${d}`;
+  const d = (phone || '').replace(/\D/g, '').replace(/^0/, '').replace(/^55/, '');
+  return d ? `55${d}` : null;
 }
 
 function daysPast(dateStr) {
@@ -25,29 +21,36 @@ function daysPast(dateStr) {
   return Math.max(0, Math.round((today - dt) / 86400000));
 }
 
-// ── Templates por fase ────────────────────────────────────────────────────────
-const TEMPLATES = {
-  cedo:  [
-    (n, v)    => `Ei ${n}! 😊 Lembra do brownie? São R$ ${v} ainda pendentes. Me chama aqui quando puder!`,
-    (n, v)    => `Oi ${n}! Tô passando pra lembrar do brownie (R$ ${v}). Sem pressa, mas qualquer hora tá bom 🍫`,
-    (n, v)    => `Fala ${n}! O brownie foi R$ ${v}, qualquer hora que der me passa o Pix 😄`,
-  ],
-  meio:  [
-    (n, v)    => `Oi ${n}! Já faz alguns dias do brownie né? R$ ${v} ainda tá em aberto 😅 Me chama lá!`,
-    (n, v)    => `Ei ${n}, tudo bem? Passando pra ver se consegue acertar os R$ ${v} do brownie essa semana 🍫`,
-  ],
-  tarde: [
-    (n, v)    => `Oi ${n}! Faz bastante tempo que tá em aberto os R$ ${v} do brownie 😬 Consegue acertar hoje?`,
-    (n, v, d) => `Ei ${n}, vou precisar acertar o brownie com você. São R$ ${v} há ${d} dias. Me fala quando puder!`,
-  ],
-};
+// ── Busca template no banco ───────────────────────────────────────────────────
+async function getTemplate(db, status, dias) {
+  const { rows } = await db.execute({
+    sql:  `SELECT * FROM cobranca_templates WHERE status=? AND dias_min<=? AND (dias_max IS NULL OR dias_max>=?) LIMIT 1`,
+    args: [status, dias, dias],
+  });
+  return rows[0] || null;
+}
 
-function buildMensagem(order, tentativa) {
+// ── Busca chave Pix do config ─────────────────────────────────────────────────
+async function getPixKey(db) {
+  const { rows } = await db.execute(`SELECT value FROM config WHERE key='pix'`);
+  return rows[0]?.value || '';
+}
+
+// ── Interpola variáveis na mensagem ──────────────────────────────────────────
+function interpolate(mensagem, order, dias, pixKey) {
   const nome  = order.name.split(' ')[0];
-  const valor = (+order.total || 0).toFixed(2).replace('.', ',');
-  const dias  = daysPast(order.date);
-  const pool  = dias <= 3 ? TEMPLATES.cedo : dias <= 7 ? TEMPLATES.meio : TEMPLATES.tarde;
-  return pool[(tentativa - 1) % pool.length](nome, valor, dias);
+  const total = `R$ ${(+order.total || 0).toFixed(2).replace('.', ',')}`;
+  const fmtDate = (d) => {
+    if (!d) return '';
+    const [y, m, dd] = d.split('-');
+    return `${dd}/${m}/${y}`;
+  };
+  return mensagem
+    .replace(/\{nome\}/gi,  nome)
+    .replace(/\{total\}/gi, total)
+    .replace(/\{dias\}/gi,  String(dias))
+    .replace(/\{data\}/gi,  fmtDate(order.date))
+    .replace(/\{pix\}/gi,   pixKey);
 }
 
 // ── Z-API send ────────────────────────────────────────────────────────────────
@@ -76,7 +79,7 @@ async function logCobranca(db, orderId, mensagem, status, tentativa) {
   });
 }
 
-// ── Verificações ──────────────────────────────────────────────────────────────
+// ── Verificações de limite ────────────────────────────────────────────────────
 async function checkarLimites(db, orderId) {
   const today = todayStr();
   const { rows: [r1] } = await db.execute({ sql: `SELECT COUNT(*) as c FROM cobrancas_log WHERE order_id=? AND status='enviado'`, args: [orderId] });
@@ -90,15 +93,23 @@ async function checkarLimites(db, orderId) {
   return prev + 1;
 }
 
-// ── Disparo único (manual) ────────────────────────────────────────────────────
+// ── Disparo único (manual — sem restrição de horário) ────────────────────────
 async function dispararUnica(db, orderId) {
   const { rows: [order] } = await db.execute({ sql: 'SELECT * FROM orders WHERE id=?', args: [orderId] });
   if (!order)       throw new Error('Pedido não encontrado');
   if (!order.phone) throw new Error('Telefone não cadastrado neste pedido');
+
   const tentativa = await checkarLimites(db, orderId);
   const phone     = formatPhone(order.phone);
   if (!phone)     throw new Error('Telefone inválido');
-  const mensagem  = buildMensagem(order, tentativa);
+
+  const dias     = daysPast(order.date);
+  const tmpl     = await getTemplate(db, order.status, dias);
+  if (!tmpl) throw new Error(`Nenhuma regra de cobrança configurada para "${order.status}" com ${dias} dia(s) de atraso. Configure em Mensagens WA → 🔔 Automático.`);
+
+  const pixKey   = await getPixKey(db);
+  const mensagem = interpolate(tmpl.mensagem, order, dias, pixKey);
+
   try {
     await sendZapi(phone, mensagem);
     await logCobranca(db, orderId, mensagem, 'enviado', tentativa);
@@ -117,12 +128,14 @@ async function dispararTodas(db) {
   if (dow === 0 || dow === 6)   return { skipped: 'fim de semana', enviados: 0, falhas: 0, results: [] };
   if (hour < 10 || hour >= 17) return { skipped: 'fora do horário permitido (10h–17h)', enviados: 0, falhas: 0, results: [] };
 
-  const today = todayStr();
+  const today  = todayStr();
+  const pixKey = await getPixKey(db);
   const { rows: orders } = await db.execute(`SELECT * FROM orders WHERE status IN ('vencido','avencer') AND total>0 AND phone IS NOT NULL AND phone!=''`);
   let enviados = 0, falhas = 0;
   const results = [];
 
   for (const order of orders) {
+    // Limite: máx 3 enviados, 1 por dia
     const { rows: [r1] } = await db.execute({ sql: `SELECT COUNT(*) as c FROM cobrancas_log WHERE order_id=? AND status='enviado'`, args: [order.id] });
     if (Number(r1.c) >= 3) continue;
     const { rows: [r2] } = await db.execute({
@@ -130,15 +143,21 @@ async function dispararTodas(db) {
       args: [order.id, today],
     });
     if (Number(r2.c) > 0) continue;
+
     const tentativa = Number(r1.c) + 1;
     const phone     = formatPhone(order.phone);
     if (!phone) continue;
-    const mensagem  = buildMensagem(order, tentativa);
+
+    const dias = daysPast(order.date);
+    const tmpl = await getTemplate(db, order.status, dias);
+    if (!tmpl) continue; // Sem regra configurada para este período — pula silenciosamente
+
+    const mensagem = interpolate(tmpl.mensagem, order, dias, pixKey);
     try {
       await sendZapi(phone, mensagem);
       await logCobranca(db, order.id, mensagem, 'enviado', tentativa);
       enviados++;
-      results.push({ name: order.name, status: 'enviado', tentativa });
+      results.push({ name: order.name, status: 'enviado', tentativa, dias });
     } catch (e) {
       await logCobranca(db, order.id, mensagem, 'falha', tentativa);
       falhas++;
