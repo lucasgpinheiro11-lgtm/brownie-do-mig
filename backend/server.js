@@ -3,6 +3,7 @@ const express  = require('express');
 const cors     = require('cors');
 const jwt      = require('jsonwebtoken');
 const cobranca = require('./cobranca.js');
+const agente   = require('./agente.js');
 
 // ── AUTH ──────────────────────────────────────────────────────────────────────
 const JWT_SECRET  = process.env.JWT_SECRET  || 'brownie-do-mig-secret-2025';
@@ -48,6 +49,60 @@ app.use('/api', (req, res, next) => {
   } catch {
     res.status(401).json({ error: 'Token inválido ou expirado. Faça login novamente.' });
   }
+});
+
+// ── WEBHOOK Z-API (público — sem auth) ───────────────────────────────────────
+// Configure em: Z-API Dashboard → Sua instância → Webhooks → "Ao receber"
+// URL: https://<seu-backend>.onrender.com/webhook/zapi
+app.post('/webhook/zapi', async (req, res) => {
+  // Responde imediatamente (Z-API espera 200 rápido)
+  res.json({ ok: true });
+
+  // Segurança opcional: WEBHOOK_SECRET no env
+  const secret = process.env.WEBHOOK_SECRET;
+  if (secret && req.headers['x-webhook-secret'] !== secret) {
+    console.warn('[Webhook] Token inválido — ignorado');
+    return;
+  }
+
+  try {
+    const result = await agente.processarMensagem(db, req.body);
+    if (!result.ignorado) console.log('[Webhook] Processado:', JSON.stringify(result));
+  } catch (e) {
+    console.error('[Webhook] Erro ao processar mensagem:', e.message);
+  }
+});
+
+// ── CONVERSAS (histórico + controle de automação) ─────────────────────────────
+app.get('/api/conversas', async (_, res) => {
+  try {
+    const { rows } = await db.execute(`
+      SELECT c.*, o.name as order_name, o.total as order_total
+      FROM conversas c
+      LEFT JOIN orders o ON o.id = c.order_id
+      ORDER BY c.ultima_interacao DESC
+      LIMIT 100
+    `);
+    res.json(rows);
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+app.get('/api/conversas/:phone/mensagens', async (req, res) => {
+  try {
+    const phone = agente.normPhone(req.params.phone) || req.params.phone;
+    const { rows } = await db.execute({
+      sql:  `SELECT * FROM mensagens_wa WHERE phone=? ORDER BY created_at ASC`,
+      args: [phone],
+    });
+    res.json(rows);
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+app.post('/api/conversas/:phone/retomar', async (req, res) => {
+  try {
+    await agente.retomarAutomacao(db, req.params.phone);
+    res.json({ ok: true });
+  } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
 // ── HELPERS ───────────────────────────────────────────────────────────────────
@@ -465,6 +520,8 @@ async function initDB() {
     { sql: `CREATE TABLE IF NOT EXISTS config (key TEXT PRIMARY KEY, value TEXT DEFAULT '')` },
     { sql: `CREATE TABLE IF NOT EXISTS cobrancas_log (id TEXT PRIMARY KEY, order_id TEXT NOT NULL, mensagem TEXT DEFAULT '', status TEXT DEFAULT 'enviado', created_at INTEGER DEFAULT 0, tentativa INTEGER DEFAULT 1)` },
     { sql: `CREATE TABLE IF NOT EXISTS cobranca_templates (id TEXT PRIMARY KEY, status TEXT NOT NULL, dias_min INTEGER NOT NULL DEFAULT 1, dias_max INTEGER, mensagem TEXT NOT NULL DEFAULT '')` },
+    { sql: `CREATE TABLE IF NOT EXISTS mensagens_wa (id TEXT PRIMARY KEY, phone TEXT NOT NULL, order_id TEXT, direcao TEXT NOT NULL, mensagem TEXT NOT NULL, fonte TEXT DEFAULT 'sistema', created_at INTEGER NOT NULL)` },
+    { sql: `CREATE TABLE IF NOT EXISTS conversas (phone TEXT PRIMARY KEY, order_id TEXT, pausar_automacao INTEGER DEFAULT 0, ultima_interacao INTEGER, status_conversa TEXT DEFAULT 'ativo')` },
   ], 'write');
 
   const { rows } = await db.execute('SELECT COUNT(*) as c FROM insumos');

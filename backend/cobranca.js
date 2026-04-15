@@ -185,6 +185,16 @@ async function dispararTodas(db) {
     const phone     = formatPhone(order.phone);
     if (!phone) continue;
 
+    // Pula se cliente respondeu e automação está pausada
+    const { rows: [conv] } = await db.execute({
+      sql:  `SELECT pausar_automacao FROM conversas WHERE phone=?`,
+      args: [phone],
+    });
+    if (conv?.pausar_automacao === 1) {
+      results.push({ name: order.name, status: 'pausado', motivo: 'cliente_respondeu' });
+      continue;
+    }
+
     const dias = daysPast(order.date);
     if (dias === 0) continue; // Ainda não venceu — pula
 
