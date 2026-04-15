@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useApp } from '../context/AppContext.jsx';
 import { OrderModal } from '../components/OrderModal.jsx';
 import { PixModal } from '../components/PixModal.jsx';
@@ -30,6 +30,7 @@ export function Kanban() {
   const [dragId,    setDragId]    = useState(null);
   const [dragOver,  setDragOver]  = useState(null);
   const [cobrando,  setCobrando]  = useState(false);
+  const [chatOrder, setChatOrder] = useState(null);
 
   // ── Stats ─────────────────────────────────────────────────────────────────
   const todayStr = new Date().toISOString().split('T')[0];
@@ -198,6 +199,7 @@ export function Kanban() {
                       onPix={() => setPixOrder(o)}
                       onWA={() => sendWA(o)}
                       onCobrar={() => cobrarUm(o.id)}
+                      onChat={() => setChatOrder(o)}
                     />
                   ))}
                 </div>
@@ -207,14 +209,15 @@ export function Kanban() {
         </div>
       </div>
 
-      <OrderModal isOpen={showOrder} onClose={()=>setShowOrder(false)} editId={editId} />
-      <PixModal   isOpen={!!pixOrder} onClose={()=>setPixOrder(null)} order={pixOrder} />
+      <OrderModal    isOpen={showOrder}    onClose={()=>setShowOrder(false)} editId={editId} />
+      <PixModal      isOpen={!!pixOrder}   onClose={()=>setPixOrder(null)}  order={pixOrder} />
+      <ConversaModal isOpen={!!chatOrder}  onClose={()=>setChatOrder(null)} order={chatOrder} toast={toast} />
     </>
   );
 }
 
 // ── Kanban Card ───────────────────────────────────────────────────────────────
-function KanbanCard({ order: o, onDragStart, onEdit, onDelete, onMarkPaid, onPix, onWA, onCobrar }) {
+function KanbanCard({ order: o, onDragStart, onEdit, onDelete, onMarkPaid, onPix, onWA, onCobrar, onChat }) {
   const pc = PAYMENT_COLORS[o.payment] || ['#f5f5f5','#555'];
   const payLbl = PAYMENT_LABELS[o.payment] || o.payment;
   const d = daysDiff(o.date);
@@ -279,6 +282,9 @@ function KanbanCard({ order: o, onDragStart, onEdit, onDelete, onMarkPaid, onPix
 
       <div className="cacts">
         <button className="ca ca-wa"  onClick={onWA}>📱 WA</button>
+        {o.phone && (
+          <button className="ca" style={{background:'#E3F2FD',color:'#1565C0'}} onClick={onChat}>💬</button>
+        )}
         {['vencido','avencer'].includes(o.status) && (
           <button className="ca" style={{background:'#E8F5E9',color:'#2E7D32'}} onClick={onCobrar}>🔔 Cobrar</button>
         )}
@@ -293,6 +299,125 @@ function KanbanCard({ order: o, onDragStart, onEdit, onDelete, onMarkPaid, onPix
         )}
         <button className="ca ca-ed" onClick={onEdit}>✏️</button>
         <button className="ca ca-dl" onClick={onDelete}>🗑</button>
+      </div>
+    </div>
+  );
+}
+
+// ── Modal de Histórico de Conversa ────────────────────────────────────────────
+function ConversaModal({ isOpen, onClose, order, toast }) {
+  const [msgs,    setMsgs]    = useState([]);
+  const [loading, setLoading] = useState(false);
+  const [pausada, setPausada] = useState(false);
+  const bottomRef = useRef(null);
+
+  useEffect(() => {
+    if (!isOpen || !order?.phone) return;
+    setMsgs([]);
+    setLoading(true);
+    api.getConversaMensagens(order.phone)
+      .then(data => {
+        setMsgs(data);
+        setPausada(data.some(m => m.direcao === 'entrada'));
+      })
+      .catch(() => setMsgs([]))
+      .finally(() => setLoading(false));
+  }, [isOpen, order]);
+
+  useEffect(() => {
+    if (msgs.length) bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
+  }, [msgs]);
+
+  async function retomar() {
+    try {
+      await api.retomarAutomacao(order.phone);
+      setPausada(false);
+      toast('▶️ Automação retomada!');
+    } catch (e) { toast('❌ ' + e.message); }
+  }
+
+  if (!isOpen) return null;
+
+  const FONTE_LABEL = { regra: '⚡ Regra', ia: '🤖 IA', fallback: '🔄 Fallback', cliente: '', sistema: '' };
+
+  function fmtTime(ts) {
+    if (!ts) return '';
+    const d = new Date(typeof ts === 'number' && ts < 1e12 ? ts * 1000 : ts);
+    return d.toLocaleString('pt-BR', { day:'2-digit', month:'2-digit', hour:'2-digit', minute:'2-digit' });
+  }
+
+  return (
+    <div style={{ position:'fixed', inset:0, background:'rgba(0,0,0,.45)', zIndex:1000, display:'flex', alignItems:'center', justifyContent:'center', padding:16 }}>
+      <div style={{ background:'var(--cream)', borderRadius:'var(--r)', width:'100%', maxWidth:440, maxHeight:'85vh', display:'flex', flexDirection:'column', boxShadow:'0 8px 32px rgba(0,0,0,.25)' }}>
+
+        {/* Header */}
+        <div style={{ display:'flex', alignItems:'center', gap:10, padding:'14px 16px', borderBottom:'1px solid var(--border)', flexShrink:0 }}>
+          <div style={{ flex:1 }}>
+            <div style={{ fontSize:14, fontWeight:700, color:'var(--bd)' }}>💬 {order?.name}</div>
+            <div style={{ fontSize:10, color:'var(--mu)' }}>{order?.phone}</div>
+          </div>
+          {pausada && (
+            <button
+              onClick={retomar}
+              style={{ fontSize:10, padding:'4px 10px', background:'#E8F5E9', color:'#2E7D32', border:'1px solid #A5D6A7', borderRadius:20, cursor:'pointer', fontFamily:'Sora,sans-serif', fontWeight:700 }}
+            >
+              ▶️ Retomar auto
+            </button>
+          )}
+          <button onClick={onClose} style={{ background:'none', border:'none', fontSize:18, cursor:'pointer', color:'var(--mu)', lineHeight:1 }}>×</button>
+        </div>
+
+        {/* Status de automação */}
+        {pausada && (
+          <div style={{ fontSize:10, textAlign:'center', padding:'6px 16px', background:'#FFF8E1', color:'#F57F17', borderBottom:'1px solid var(--border)', flexShrink:0 }}>
+            ⏸ Automação pausada — cliente respondeu. Clique em "Retomar" para voltar a enviar cobranças automáticas.
+          </div>
+        )}
+
+        {/* Mensagens */}
+        <div style={{ flex:1, overflowY:'auto', padding:'12px 14px', display:'flex', flexDirection:'column', gap:8 }}>
+          {loading && <div style={{ textAlign:'center', color:'var(--mu)', fontSize:12, padding:20 }}>Carregando...</div>}
+
+          {!loading && msgs.length === 0 && (
+            <div style={{ textAlign:'center', color:'var(--mu)', fontSize:12, padding:30 }}>
+              Nenhuma mensagem ainda.<br/>
+              <span style={{ fontSize:10 }}>As conversas aparecerão aqui quando o cliente responder.</span>
+            </div>
+          )}
+
+          {msgs.map(m => {
+            const isIn = m.direcao === 'entrada'; // cliente
+            return (
+              <div key={m.id} style={{ display:'flex', flexDirection:'column', alignItems: isIn ? 'flex-start' : 'flex-end' }}>
+                <div style={{
+                  maxWidth: '82%',
+                  padding: '8px 12px',
+                  borderRadius: isIn ? '4px 16px 16px 16px' : '16px 4px 16px 16px',
+                  background: isIn ? '#F0F0F0' : '#DCF8C6',
+                  color: '#222',
+                  fontSize: 12,
+                  lineHeight: 1.5,
+                  whiteSpace: 'pre-wrap',
+                  wordBreak: 'break-word',
+                }}>
+                  {m.mensagem}
+                </div>
+                <div style={{ fontSize: 9, color: 'var(--mu)', marginTop: 2, display:'flex', gap:6 }}>
+                  <span>{fmtTime(m.created_at)}</span>
+                  {FONTE_LABEL[m.fonte] && <span style={{ color:'#999' }}>{FONTE_LABEL[m.fonte]}</span>}
+                </div>
+              </div>
+            );
+          })}
+          <div ref={bottomRef} />
+        </div>
+
+        {/* Footer */}
+        <div style={{ padding:'10px 16px', borderTop:'1px solid var(--border)', flexShrink:0 }}>
+          <button onClick={onClose} style={{ width:'100%', padding:'8px', background:'var(--cd)', border:'none', borderRadius:'var(--rs)', fontFamily:'Sora,sans-serif', fontSize:12, color:'var(--bd)', cursor:'pointer', fontWeight:600 }}>
+            Fechar
+          </button>
+        </div>
       </div>
     </div>
   );

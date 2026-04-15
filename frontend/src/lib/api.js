@@ -73,3 +73,7 @@ export const getCobrancas = ()        => req('/cobrancas/logs');
 export const getCobrancaTemplates    = ()       => req('/cobranca-templates');
 export const createCobrancaTemplate  = (data)   => req('/cobranca-templates',      { method:'POST',   body: data });
 export const deleteCobrancaTemplate  = (id)     => req(`/cobranca-templates/${id}`, { method:'DELETE' });
+
+// Conversas (agente IA)
+export const getConversaMensagens = (phone)  => req(`/conversas/${encodeURIComponent(phone)}/mensagens`);
+export const retomarAutomacao     = (phone)  => req(`/conversas/${encodeURIComponent(phone)}/retomar`, { method:'POST' });
