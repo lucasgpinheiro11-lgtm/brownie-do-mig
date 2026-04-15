@@ -8,9 +8,12 @@ function uid() { return 'cb' + Date.now() + Math.random().toString(36).slice(2, 
 function todayStr() { return new Date().toISOString().split('T')[0]; }
 
 function formatPhone(phone) {
-  const d = (phone || '').replace(/\D/g, '');
+  const d = (phone || '')
+    .replace(/\D/g, '')   // remove tudo que não é número
+    .replace(/^0/, '')    // remove zero inicial
+    .replace(/^55/, '');  // remove 55 se já tiver
   if (!d) return null;
-  return d.startsWith('55') ? d : '55' + d;
+  return `55${d}`;        // adiciona 55 do Brasil
 }
 
 function daysPast(dateStr) {
@@ -55,16 +58,20 @@ function buildMensagem(order, tentativa) {
 // ── Z-API send ────────────────────────────────────────────────────────────────
 async function sendZapi(phone, message) {
   if (!ZAPI_INSTANCE || !ZAPI_TOKEN) throw new Error('Credenciais Z-API não configuradas (ZAPI_INSTANCE_ID / ZAPI_TOKEN)');
+  const payload = { phone, message };
+  console.log('Payload Z-API:', JSON.stringify(payload));
   const res = await fetch(ZAPI_URL, {
     method:  'POST',
     headers: { 'Content-Type': 'application/json' },
-    body:    JSON.stringify({ phone, message }),
+    body:    JSON.stringify(payload),
   });
+  const rawText = await res.text();
+  console.log('Resposta Z-API:', rawText);
   if (!res.ok) {
-    const err = await res.json().catch(() => ({}));
-    throw new Error(err.message || `Z-API erro ${res.status}`);
+    const err = JSON.parse(rawText || '{}');
+    throw new Error(err.message || err.error || `Z-API erro ${res.status}`);
   }
-  return res.json();
+  return JSON.parse(rawText);
 }
 
 // ── Log helper ────────────────────────────────────────────────────────────────
