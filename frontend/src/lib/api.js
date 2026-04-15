@@ -1,4 +1,4 @@
-const BASE = import.meta.env.VITE_API_URL || '/api';
+const BASE = 'https://brownie-do-mig.onrender.com/api';
 
 function getToken() { return localStorage.getItem('mg_token'); }
 
