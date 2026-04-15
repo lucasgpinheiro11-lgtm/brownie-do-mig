@@ -18,8 +18,9 @@ const USERS = [
 const app = express();
 const PORT = process.env.PORT || 3001;
 
-app.use(cors({ origin: ['http://localhost:5173', 'http://127.0.0.1:5173'] }));
+app.use(cors({ origin: true, credentials: true }));
 app.use(express.json({ limit: '20mb' }));
+
 
 // ── LOGIN (public — no token required) ───────────────────────────────────────
 app.post('/api/auth/login', (req, res) => {
@@ -469,10 +470,19 @@ app.post('/api/restore', (req, res) => {
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
-// ─────────────────────────────────────────────────────────────────────────────
-app.get('/', (req, res) => {
-  res.send('🍫 API Brownie do Mig rodando ONLINE 🚀');
-});
+// ── FRONTEND (produção) ───────────────────────────────────────────────────────
+// Em dev, o Vite roda separado. Em produção, o Express serve o build do frontend.
+if (process.env.NODE_ENV === 'production') {
+  const frontendDist = path.join(__dirname, '..', 'frontend', 'dist');
+  app.use(express.static(frontendDist));
+  app.get('*', (_, res) => {
+    res.sendFile(path.join(frontendDist, 'index.html'));
+  });
+} else {
+  app.get('/', (_, res) => {
+    res.send('🍫 API Brownie do Mig rodando em modo DEV — frontend em http://localhost:5173');
+  });
+}
 
 app.listen(PORT, () => {
   console.log(`\n🍫 Brownie do Mig — Backend em http://localhost:${PORT}\n`);

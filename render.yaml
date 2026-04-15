@@ -1,0 +1,28 @@
+services:
+  - type: web
+    name: brownie-do-mig
+    runtime: node
+    region: oregon
+    plan: free          # troque para "starter" ou superior para habilitar o disco persistente
+
+    buildCommand: cd frontend && npm ci && npm run build && cd ../backend && npm ci
+    startCommand: node --no-warnings=ExperimentalWarning backend/server.js
+
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: JWT_SECRET
+        generateValue: true   # Render gera automaticamente um segredo aleatório
+      - key: JWT_EXPIRES
+        value: 24h
+      - key: DB_PATH
+        value: /data/brownie.db   # requer disco persistente (ver abaixo)
+
+    # ── Disco persistente ─────────────────────────────────────────────────────
+    # Necessário para o SQLite sobreviver a deploys e reinicializações.
+    # Disponível apenas em planos pagos (starter+). Remova o bloco abaixo
+    # se usar o plano free (dados serão perdidos a cada deploy).
+    disk:
+      name: brownie-db-disk
+      mountPath: /data
+      sizeGB: 1
