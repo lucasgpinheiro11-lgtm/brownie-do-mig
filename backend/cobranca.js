@@ -1,7 +1,8 @@
 // ── Serviço de Cobranças via Z-API ────────────────────────────────────────────
-const ZAPI_INSTANCE = process.env.ZAPI_INSTANCE_ID;
-const ZAPI_TOKEN    = process.env.ZAPI_TOKEN;
-const ZAPI_URL      = `https://api.z-api.io/instances/${ZAPI_INSTANCE}/token/${ZAPI_TOKEN}/send-text`;
+const ZAPI_INSTANCE     = process.env.ZAPI_INSTANCE_ID;
+const ZAPI_TOKEN        = process.env.ZAPI_TOKEN;
+const ZAPI_CLIENT_TOKEN = process.env.ZAPI_CLIENT_TOKEN; // Segurança → Client-Token no painel Z-API
+const ZAPI_URL          = `https://api.z-api.io/instances/${ZAPI_INSTANCE}/token/${ZAPI_TOKEN}/send-text`;
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 function uid() { return 'cb' + Date.now() + Math.random().toString(36).slice(2, 5); }
@@ -59,11 +60,14 @@ function buildMensagem(order, tentativa) {
 async function sendZapi(phone, message) {
   if (!ZAPI_INSTANCE || !ZAPI_TOKEN) throw new Error('Credenciais Z-API não configuradas (ZAPI_INSTANCE_ID / ZAPI_TOKEN)');
   const payload = { phone, message };
+  const headers = { 'Content-Type': 'application/json' };
+  if (ZAPI_CLIENT_TOKEN) headers['Client-Token'] = ZAPI_CLIENT_TOKEN;
   console.log('Payload Z-API:', JSON.stringify(payload));
+  console.log('Headers Z-API:', JSON.stringify(headers));
   const res = await fetch(ZAPI_URL, {
-    method:  'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body:    JSON.stringify(payload),
+    method: 'POST',
+    headers,
+    body:   JSON.stringify(payload),
   });
   const rawText = await res.text();
   console.log('Resposta Z-API:', rawText);
