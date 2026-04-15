@@ -49,7 +49,7 @@ const SAMPLE = {
 };
 
 const VARS_MANUAL = ['{nome}', '{itens}', '{total}', '{pagamento}', '{data}', '{endereco}', '{pix}'];
-const VARS_AUTO   = ['{nome}', '{total}', '{dias}', '{data}', '{pix}'];
+const VARS_AUTO   = ['{nome}', '{total}', '{dias}', '{data}', '{pix}', '{extrato}'];
 
 const STATUS_OPTS = [
   { value: 'vencido', label: '🔴 Vencido' },
@@ -58,17 +58,17 @@ const STATUS_OPTS = [
 
 const EMPTY_FORM = { status: 'vencido', dias_min: 1, dias_max: '', sem_max: false, mensagem: '' };
 
+const SAMPLE_EXTRATO = `📋 Extrato:\n• 10/04 — 1x Caixa 6 Brownies — R$ 45,00\n• 13/04 — 2x Bolo de Pote — R$ 36,00`;
+
 // ── Interpola preview do template automático ──────────────────────────────────
 function interpolatePreview(tpl, dias = 5, pix = '(chave pix)') {
-  const nome  = 'Maria';
-  const total = 'R$ 81,00';
-  const data  = '31/12/2025';
   return tpl
-    .replace(/\{nome\}/gi,  nome)
-    .replace(/\{total\}/gi, total)
-    .replace(/\{dias\}/gi,  String(dias))
-    .replace(/\{data\}/gi,  data)
-    .replace(/\{pix\}/gi,   pix);
+    .replace(/\{nome\}/gi,    'Maria')
+    .replace(/\{total\}/gi,   'R$ 81,00')
+    .replace(/\{dias\}/gi,    String(dias))
+    .replace(/\{data\}/gi,    '05/04/2025')
+    .replace(/\{pix\}/gi,     pix)
+    .replace(/\{extrato\}/gi, SAMPLE_EXTRATO);
 }
 
 // ── Tab: Mensagens manuais ────────────────────────────────────────────────────

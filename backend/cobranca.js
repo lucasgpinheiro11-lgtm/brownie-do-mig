@@ -36,21 +36,36 @@ async function getPixKey(db) {
   return rows[0]?.value || '';
 }
 
+// ── Monta extrato de compras ──────────────────────────────────────────────────
+function buildExtrato(sales) {
+  if (!sales || sales.length === 0) return '';
+  const lines = sales.map(s => {
+    const dt    = s.date ? (() => { const [,m,d] = s.date.split('-'); return `${d}/${m}`; })() : '';
+    const items = (Array.isArray(s.items) ? s.items : JSON.parse(s.items || '[]'));
+    const prods = items.map(i => `${i.qty}x ${i.n}`).join(', ');
+    const val   = `R$ ${(+s.total || 0).toFixed(2).replace('.', ',')}`;
+    return `• ${dt}${dt ? ' — ' : ''}${prods} — ${val}`;
+  }).join('\n');
+  return `📋 Extrato:\n${lines}`;
+}
+
 // ── Interpola variáveis na mensagem ──────────────────────────────────────────
-function interpolate(mensagem, order, dias, pixKey) {
-  const nome  = order.name.split(' ')[0];
-  const total = `R$ ${(+order.total || 0).toFixed(2).replace('.', ',')}`;
+function interpolate(mensagem, order, dias, pixKey, sales = []) {
+  const nome    = order.name.split(' ')[0];
+  const total   = `R$ ${(+order.total || 0).toFixed(2).replace('.', ',')}`;
+  const extrato = buildExtrato(sales);
   const fmtDate = (d) => {
     if (!d) return '';
     const [y, m, dd] = d.split('-');
     return `${dd}/${m}/${y}`;
   };
   return mensagem
-    .replace(/\{nome\}/gi,  nome)
-    .replace(/\{total\}/gi, total)
-    .replace(/\{dias\}/gi,  String(dias))
-    .replace(/\{data\}/gi,  fmtDate(order.date))
-    .replace(/\{pix\}/gi,   pixKey);
+    .replace(/\{nome\}/gi,    nome)
+    .replace(/\{total\}/gi,   total)
+    .replace(/\{dias\}/gi,    String(dias))
+    .replace(/\{data\}/gi,    fmtDate(order.date))
+    .replace(/\{pix\}/gi,     pixKey)
+    .replace(/\{extrato\}/gi, extrato);
 }
 
 // ── Z-API send ────────────────────────────────────────────────────────────────
@@ -107,8 +122,10 @@ async function dispararUnica(db, orderId) {
   const tmpl     = await getTemplate(db, order.status, dias);
   if (!tmpl) throw new Error(`Nenhuma regra de cobrança configurada para "${order.status}" com ${dias} dia(s) de atraso. Configure em Mensagens WA → 🔔 Automático.`);
 
-  const pixKey   = await getPixKey(db);
-  const mensagem = interpolate(tmpl.mensagem, order, dias, pixKey);
+  const pixKey = await getPixKey(db);
+  const { rows: salesRows } = await db.execute({ sql: 'SELECT * FROM sales WHERE order_id=? ORDER BY date ASC', args: [orderId] });
+  const sales = salesRows.map(s => ({ ...s, items: JSON.parse(s.items || '[]') }));
+  const mensagem = interpolate(tmpl.mensagem, order, dias, pixKey, sales);
 
   try {
     await sendZapi(phone, mensagem);
@@ -131,6 +148,16 @@ async function dispararTodas(db) {
   const today  = todayStr();
   const pixKey = await getPixKey(db);
   const { rows: orders } = await db.execute(`SELECT * FROM orders WHERE status IN ('vencido','avencer') AND total>0 AND phone IS NOT NULL AND phone!=''`);
+
+  // Busca todas as sales de uma vez e agrupa por order_id
+  const { rows: allSales } = orders.length > 0
+    ? await db.execute({ sql: `SELECT * FROM sales WHERE order_id IN (${orders.map(() => '?').join(',')}) ORDER BY date ASC`, args: orders.map(o => o.id) })
+    : { rows: [] };
+  const salesMap = {};
+  allSales.forEach(s => {
+    if (!salesMap[s.order_id]) salesMap[s.order_id] = [];
+    salesMap[s.order_id].push({ ...s, items: JSON.parse(s.items || '[]') });
+  });
   let enviados = 0, falhas = 0;
   const results = [];
 
@@ -152,7 +179,7 @@ async function dispararTodas(db) {
     const tmpl = await getTemplate(db, order.status, dias);
     if (!tmpl) continue; // Sem regra configurada para este período — pula silenciosamente
 
-    const mensagem = interpolate(tmpl.mensagem, order, dias, pixKey);
+    const mensagem = interpolate(tmpl.mensagem, order, dias, pixKey, salesMap[order.id] || []);
     try {
       await sendZapi(phone, mensagem);
       await logCobranca(db, order.id, mensagem, 'enviado', tentativa);
