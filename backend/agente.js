@@ -145,21 +145,35 @@ async function buscarHistorico(db, phone) {
 }
 
 // ── Busca pedido pendente pelo telefone ───────────────────────────────────────
+// Lida com o problema do "9" extra: Z-API pode enviar 8 dígitos (ex: 5181889218)
+// enquanto o pedido foi cadastrado com 9 dígitos (ex: 51981889218) ou vice-versa.
 async function buscarPedidoPendente(db, phone) {
   const norm = normPhone(phone);
   if (!norm) return null;
 
-  // Compara os últimos 11 dígitos (DDD + número) para tolerar variações de formato
-  const local11 = norm.replace(/^55/, '');
+  const local = norm.replace(/^55/, ''); // ex: "5181889218" ou "51981889218"
+
+  // Gera variantes com e sem o dígito 9 após o DDD
+  const variants = new Set([local]);
+  if (local.length === 10) {
+    // Formato antigo (8 dígitos): insere 9 após o DDD (primeiros 2 dígitos)
+    variants.add(local.slice(0, 2) + '9' + local.slice(2));
+  } else if (local.length === 11 && local[2] === '9') {
+    // Formato novo (9 dígitos): tenta sem o 9 também
+    variants.add(local.slice(0, 2) + local.slice(3));
+  }
+
+  const strip = `replace(replace(replace(replace(replace(phone,'+',''),'-',''),' ',''),'(',''),')','')`;
+  const conds = [...variants].map(() => `${strip} LIKE ?`).join(' OR ');
 
   const { rows } = await db.execute({
     sql: `SELECT * FROM orders
-          WHERE replace(replace(replace(replace(replace(phone,'+',''),'-',''),' ',''),'(',''),')','') LIKE ?
+          WHERE (${conds})
             AND status IN ('vencido','avencer','confirmado','novo')
             AND total > 0
           ORDER BY date ASC
           LIMIT 1`,
-    args: [`%${local11}`],
+    args: [...variants].map(v => `%${v}`),
   });
   return rows[0] || null;
 }
