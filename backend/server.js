@@ -52,11 +52,15 @@ app.use('/api', (req, res, next) => {
 });
 
 // ── WEBHOOK Z-API (público — sem auth) ───────────────────────────────────────
-// Configure em: Z-API Dashboard → Sua instância → Webhooks → "Ao receber"
-// URL: https://<seu-backend>.onrender.com/webhook/zapi
+// GET de diagnóstico — confirma que o endpoint existe e está acessível
+app.get('/webhook/zapi', (_, res) => res.json({ ok: true, msg: 'Webhook Z-API ativo. Configure como POST no painel Z-API.' }));
+
 app.post('/webhook/zapi', async (req, res) => {
-  // Responde imediatamente (Z-API espera 200 rápido)
+  // Responde imediatamente (Z-API exige resposta rápida)
   res.json({ ok: true });
+
+  // Log completo do payload para diagnóstico (remover em produção se quiser)
+  console.log('[Webhook] Payload recebido:', JSON.stringify(req.body).slice(0, 400));
 
   // Segurança opcional: WEBHOOK_SECRET no env
   const secret = process.env.WEBHOOK_SECRET;
@@ -67,9 +71,9 @@ app.post('/webhook/zapi', async (req, res) => {
 
   try {
     const result = await agente.processarMensagem(db, req.body);
-    if (!result.ignorado) console.log('[Webhook] Processado:', JSON.stringify(result));
+    console.log('[Webhook] Resultado:', JSON.stringify(result));
   } catch (e) {
-    console.error('[Webhook] Erro ao processar mensagem:', e.message);
+    console.error('[Webhook] Erro:', e.message, e.stack);
   }
 });
 
