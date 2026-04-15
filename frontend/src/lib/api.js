@@ -1,37 +1,28 @@
 const BASE = import.meta.env.VITE_API_URL || '/api';
 
-console.log('[v0] API BASE URL:', BASE);
-
 function getToken() { return localStorage.getItem('mg_token'); }
 
 async function req(path, opts = {}) {
   const token = getToken();
   const headers = { 'Content-Type': 'application/json' };
   if (token) headers['Authorization'] = `Bearer ${token}`;
-  const url = BASE + path;
-  console.log('[v0] Making request to:', url);
-  try {
-    const res = await fetch(url, {
-      headers,
-      ...opts,
-      body: opts.body !== undefined ? JSON.stringify(opts.body) : undefined,
-    });
-    if (res.status === 401) {
-      localStorage.removeItem('mg_token');
-      localStorage.removeItem('mg_user');
-      window.dispatchEvent(new Event('auth:logout'));
-      const err = await res.json().catch(() => ({}));
-      throw new Error(err.error || 'Sessão expirada. Faça login novamente.');
-    }
-    if (!res.ok) {
-      const err = await res.json().catch(() => ({}));
-      throw new Error(err.error || `Erro ${res.status}`);
-    }
-    return res.json();
-  } catch (error) {
-    console.error('[v0] Request failed:', error);
-    throw error;
+  const res = await fetch(BASE + path, {
+    headers,
+    ...opts,
+    body: opts.body !== undefined ? JSON.stringify(opts.body) : undefined,
+  });
+  if (res.status === 401) {
+    localStorage.removeItem('mg_token');
+    localStorage.removeItem('mg_user');
+    window.dispatchEvent(new Event('auth:logout'));
+    const err = await res.json().catch(() => ({}));
+    throw new Error(err.error || 'Sessão expirada. Faça login novamente.');
   }
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error(err.error || `Erro ${res.status}`);
+  }
+  return res.json();
 }
 
 export const login = (cpf, password) => req('/auth/login', { method: 'POST', body: { cpf, password } });
