@@ -1,32 +1,61 @@
 [
   {
+    "nome": "Nunca cobrar juros",
+    "tipo": "politica",
+    "ativa": true,
+    "descricao": "Nunca mencione juros, multas ou acréscimos. O valor cobrado é sempre o original da conta, sem adicionais."
+  },
+  {
+    "nome": "Nunca ameaçar com ações legais",
+    "tipo": "politica",
+    "ativa": true,
+    "descricao": "Nunca mencione protestos, SPC, Serasa, negativação ou qualquer ação judicial. O tom deve ser sempre de parceria, nunca de ameaça."
+  },
+  {
+    "nome": "Nunca pressionar com urgência falsa",
+    "tipo": "politica",
+    "ativa": true,
+    "descricao": "Não use frases como 'última chance', 'prazo final' ou qualquer urgência artificial."
+  },
+  {
+    "nome": "Manter tom positivo sempre",
+    "tipo": "politica",
+    "ativa": true,
+    "descricao": "Mesmo com atraso longo, encerre sempre de forma positiva e encorajadora. O relacionamento com o cliente é prioritário."
+  },
+  {
     "nome": "Já pagou — pede comprovante",
+    "tipo": "gatilho",
     "ativa": true,
     "padrao": "já paguei|ja paguei|já realizei|ja realizei|fiz o pix|fiz o pagamento|paguei hoje|mandei o pix|realizei o pagamento",
     "resposta": "Que ótimo! 😊 Pode me enviar o comprovante? Vou encaminhar para nossa equipe verificar e eles te confirmam a quitação assim que possível! 🙏"
   },
   {
     "nome": "Promessa de pagamento",
+    "tipo": "gatilho",
     "ativa": true,
     "padrao": "vou pagar|pago amanhã|pago amanha|pago essa semana|pago na sexta|pago segunda|pago em breve|prometo pagar|prometo que pago",
     "resposta": "Perfeito! 😊 Quando realizar, me manda o comprovante que eu encaminho para a equipe confirmar. Obrigado! 🙏"
   },
   {
     "nome": "Dificuldade financeira",
+    "tipo": "gatilho",
     "ativa": true,
     "padrao": "não tenho|nao tenho|sem dinheiro|apertado|dificuldade|não consigo|nao consigo|tô sem|to sem|não posso|nao posso",
     "resposta": "Entendo, sem problema! 😊 Me fala qual data fica melhor para você e eu repasso para nossa equipe combinar. O importante é manter a comunicação! 🤝"
   },
   {
     "nome": "Confirmações curtas",
+    "tipo": "gatilho",
     "ativa": true,
-    "padrao": "^(ok|certo|entendi|sim|claro|perfeito|combinado|blz|beleza|tá|ta|ta bom|show|ótimo|otimo|obrigado|obrigada)[.!]?\\s*$",
+    "padrao": "^(ok|certo|entendi|sim|claro|perfeito|combinado|blz|beleza|ta bom|show|otimo|obrigado|obrigada)[.!]?$",
     "resposta": "Combinado! 😊 Qualquer dúvida pode me chamar."
   },
   {
-    "nome": "Exemplo desativado — ajustar data",
-    "ativa": false,
-    "padrao": "posso pagar dia|pago dia|pago no dia",
-    "resposta": "Perfeito! Vou registrar que você vai pagar nessa data e repassar para nossa equipe. 😊🙏"
+    "nome": "Manda o pix",
+    "tipo": "gatilho",
+    "ativa": true,
+    "padrao": "manda o valor e o pix|manda o pix|qual o pix|me manda o pix",
+    "resposta": "Claro! 😊 O Pix é: *{pix}*. Qualquer dúvida é só me chamar! 🙏"
   }
 ]

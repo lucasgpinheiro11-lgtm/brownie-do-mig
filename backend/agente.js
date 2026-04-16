@@ -11,16 +11,18 @@ function carregarRegras() {
     const arquivo = path.join(__dirname, 'regras.json');
     const dados   = JSON.parse(fs.readFileSync(arquivo, 'utf8'));
     const ativas  = dados.filter(r => r.ativa !== false);
-    console.log(`[Agente] ${ativas.length} regra(s) carregada(s) de regras.json`);
-    return ativas;
+    const gatilhos = ativas.filter(r => !r.tipo || r.tipo === 'gatilho');
+    const politicas = ativas.filter(r => r.tipo === 'politica');
+    console.log(`[Agente] regras.json: ${gatilhos.length} gatilho(s), ${politicas.length} política(s)`);
+    return { gatilhos, politicas };
   } catch (e) {
     console.warn('[Agente] regras.json não encontrado ou inválido:', e.message);
-    return [];
+    return { gatilhos: [], politicas: [] };
   }
 }
 
 // Carregadas uma vez na inicialização
-const REGRAS_CUSTOM = carregarRegras();
+const REGRAS = carregarRegras();
 
 // Idempotência: IDs de mensagens já processadas (in-memory)
 const processados = new Set();
@@ -37,13 +39,14 @@ function normPhone(phone) {
 function aplicarRegra(msg) {
   const m = msg.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
 
-  // 1️⃣ Regras do regras.json (têm prioridade)
-  for (const regra of REGRAS_CUSTOM) {
+  // 1️⃣ Gatilhos do regras.json (têm prioridade)
+  for (const regra of REGRAS.gatilhos) {
     try {
       const re = new RegExp(regra.padrao, 'i');
       if (re.test(m)) {
         console.log(`[Agente] Regra custom: "${regra.nome}"`);
-        return { regra: regra.nome, resposta: regra.resposta };
+        // Suporte a variáveis na resposta: {pix} é resolvido depois com o contexto do pedido
+        return { regra: regra.nome, resposta: regra.resposta, temVariavel: regra.resposta.includes('{') };
       }
     } catch (e) {
       console.warn(`[Agente] Regex inválido na regra "${regra.nome}":`, e.message);
@@ -102,6 +105,11 @@ Tom: ${ton}
 - Mensagens curtas, estilo WhatsApp (máximo 3 linhas)
 - Emojis com moderação (1-2 por mensagem)
 - Linguagem próxima mas profissional
+
+━━━ POLÍTICAS DA EMPRESA ━━━
+${REGRAS.politicas.length > 0
+  ? REGRAS.politicas.map((p, i) => `${i + 1}. ${p.descricao}`).join('\n')
+  : '(nenhuma política adicional configurada)'}
 
 ━━━ EXEMPLOS DE RESPOSTA CORRETA ━━━
 - "já paguei": "Que ótimo, ${nome}! 😊 Pode me enviar o comprovante? Vou encaminhar para nossa equipe e eles te confirmam assim que verificarem! 🙏"
@@ -324,7 +332,12 @@ async function processarMensagem(db, payload) {
   let resposta, fonte;
 
   if (regra?.resposta) {
-    resposta = regra.resposta;
+    // Resolve variáveis na resposta do gatilho
+    resposta = regra.resposta
+      .replace(/\{pix\}/gi,   pix)
+      .replace(/\{nome\}/gi,  nome)
+      .replace(/\{valor\}/gi, `R$ ${valor}`)
+      .replace(/\{dias\}/gi,  String(dias));
     fonte    = 'regra';
     console.log(`[Agente] Regra aplicada: ${regra.regra}`);
   } else {
