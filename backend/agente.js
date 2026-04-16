@@ -18,19 +18,27 @@ function normPhone(phone) {
 function aplicarRegra(msg) {
   const m = msg.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
 
+  // "já paguei" → NUNCA aceitar como confirmação, sempre pedir comprovante
   if (/j[aá] paguei|j[aá] realizei|fiz o pix|fiz o pagamento|paguei hoje|mandei o pix|realizei/.test(m))
-    return { regra: 'pagou', resposta: 'Perfeito! 😊 Pode me enviar o comprovante? Assim confirmo aqui e marco como pago! 🙏' };
+    return { regra: 'pagou_sem_comprovante', resposta: 'Que ótimo! 😊 Para confirmarmos e liberar seu pedido, preciso do comprovante de pagamento. Pode enviar uma foto ou o código da transação? 🙏' };
 
-  if (/vou pagar|pago amanh[aã]|pago hoje|pago essa semana|pago na sexta|pago segunda|pago em breve|prometo que pago/.test(m))
-    return { regra: 'promessa', resposta: 'Ótimo! 😊 Fico no aguardo! Quando realizar, manda o comprovante para eu confirmar. Obrigado! 🙏' };
+  // Promessa de pagamento → agradecer e definir prazo
+  if (/vou pagar|pago amanh[aã]|pago essa semana|pago na sexta|pago segunda|pago em breve|prometo/.test(m))
+    return { regra: 'promessa', resposta: 'Perfeito! 😊 Anota o Pix para facilitar na hora H. Assim que realizar, me manda o comprovante para eu confirmar na hora! 🙏' };
 
-  if (/n[aã]o tenho|sem dinheiro|apertado|dificuldade|n[aã]o consigo|t[oô] sem/.test(m))
-    return { regra: 'sem_dinheiro', resposta: 'Entendo! 😊 Sem problema, me fala qual a data que fica melhor para você, a gente combina um jeito. O importante é resolver juntos! 🙏' };
+  // Dificuldade financeira → empatia e negociação
+  if (/n[aã]o tenho|sem dinheiro|apertado|dificuldade|n[aã]o consigo|t[oô] sem|nao posso/.test(m))
+    return { regra: 'sem_dinheiro', resposta: 'Entendo, sem problema! 😊 Me conta qual data fica melhor pra você e a gente encontra uma solução juntos. O importante é manter a comunicação! 🤝' };
 
-  if (/^(ok|certo|entendi|sim|claro|perfeito|combinado|blz|beleza|t[aá]|ta bom|show)[.!]?\s*$/.test(m))
-    return { regra: 'confirmacao', resposta: 'Combinado! 😊 Qualquer dúvida é só me chamar.' };
+  // Pede a chave Pix → fornecer via IA (que tem o dado no contexto)
+  if (/\bpix\b|qual.*chave|como.*pago|como.*transfer|manda.*pix|qual.*pix|chave.*pix/.test(m))
+    return null; // IA inclui o pix no contexto
 
-  return null; // sem regra determinística → chama IA
+  // Confirmações curtas → encerrar amigavelmente
+  if (/^(ok|certo|entendi|sim|claro|perfeito|combinado|blz|beleza|t[aá]|ta bom|show|otimo|obrigad)[.!]?\s*$/.test(m))
+    return { regra: 'confirmacao', resposta: 'Combinado! 😊 Qualquer dúvida pode me chamar.' };
+
+  return null; // sem regra → IA
 }
 
 // ── Groq (OpenAI-compatible, free tier) ──────────────────────────────────────
@@ -39,25 +47,38 @@ async function gerarRespostaIA(nome, valor, pix, dias, mensagem, historico = [])
   const model = process.env.GROQ_MODEL || 'llama-3.1-8b-instant';
   if (!key) { console.warn('[Agente] GROQ_API_KEY não configurado — usando fallback'); return null; }
 
-  const ton = dias <= 3 ? 'leve e amigável' : dias <= 7 ? 'moderado e firme' : 'firme mas educado';
+  const ton = dias <= 3 ? 'leve e acolhedor' : dias <= 7 ? 'firme e objetivo' : 'sério mas respeitoso';
 
-  const system = `Você é um assistente de cobrança da empresa Brownies do Mig.
-Objetivo: receber pagamentos de forma educada, clara e firme.
+  const system = `Você é um assistente especializado em cobranças da empresa *Brownies do Mig*, uma confeitaria artesanal.
+Seu nome é Mig. Você é experiente, amigável e profissional — como um atendente humano de alto nível.
 
-Dados do cliente:
-- Nome: ${nome}
-- Valor devido: R$ ${valor}
-- Chave Pix: ${pix || '(a informar)'}
-- Dias em atraso: ${dias}
-- Tom esperado: ${ton}
+━━━ DADOS DO CLIENTE ━━━
+Nome: ${nome}
+Valor em aberto: R$ ${valor}
+Chave Pix: ${pix || 'solicitar ao financeiro'}
+Dias em atraso: ${dias}
+Tom desta conversa: ${ton}
 
-Regras obrigatórias:
-- Nunca seja agressivo ou ameaçador
-- Seja direto, estilo WhatsApp (máximo 3 linhas curtas)
-- Se cliente disser que vai pagar → confirme e peça comprovante
-- Se disser que não pode pagar → sugira combinar uma data
-- Inclua a chave Pix apenas se fizer sentido no contexto da resposta
-- Responda SOMENTE com o texto da mensagem, sem aspas ou explicações`;
+━━━ REGRAS INEGOCIÁVEIS ━━━
+1. NUNCA confirme pagamento sem comprovante — palavras como "já paguei" NÃO são prova
+2. Sempre solicite: foto do comprovante OU código/ID da transação Pix
+3. Se receber comprovante em imagem: agradeça, informe que está analisando e peça o código da transação para confirmar manualmente
+4. Jamais seja agressivo, ameaçador ou irônico
+5. Se cliente pedir prazo → acolha, peça data específica, confirme o combinado
+6. Se detectar informação suspeita ou inconsistente → informe que vai verificar e não confirme nada
+
+━━━ ESTILO ━━━
+- WhatsApp: direto, no máximo 3 linhas
+- Use emojis com moderação (1-2 por mensagem)
+- Linguagem próxima, mas profissional — não use gírias
+- Sempre assine como: _Brownies do Mig_ 🍫 (apenas no primeiro contato ou quando encerrar conversa)
+
+━━━ FLUXO DE COMPROVANTE ━━━
+- Cliente diz que pagou → peça comprovante
+- Cliente envia comprovante/foto → "Recebi! Estou verificando os dados... Pode confirmar o código da transação Pix? (começa com E ou começa após 'ID:')"
+- Comprovante confirmado → "Pagamento verificado! ✅ Muito obrigado, ${nome}! Seu pedido está regularizado."
+
+Responda SOMENTE com o texto da mensagem. Sem aspas, sem prefixo "Mig:", sem explicações.`;
 
   const messages = [
     { role: 'system', content: system },
@@ -224,14 +245,21 @@ async function processarMensagem(db, payload) {
   const phone    = normPhone(rawPhone);
   if (!phone) return { erro: 'telefone inválido', rawPhone };
 
-  const texto = (payload.body || payload.text?.message || payload.message?.body || '').trim();
+  // ── Detecta tipo de mídia (imagem/documento = possível comprovante) ─────────
+  const temImagem   = !!(payload.image || payload.document || payload.video);
+  const textoBase   = (payload.body || payload.text?.message || payload.message?.body || payload.caption || '').trim();
+  const legendaImagem = payload.image?.caption || payload.document?.caption || '';
+
+  // Texto final: se veio imagem sem texto, sinaliza internamente
+  const texto = textoBase || (temImagem ? '[COMPROVANTE_IMAGEM]' : '');
   if (!texto) return { ignorado: true, motivo: 'sem texto' };
 
-  console.log(`[Agente] ← ${phone}: "${texto.slice(0, 80)}"`);
+  console.log(`[Agente] ← ${phone}: ${temImagem ? '[imagem] ' : ''}"${textoBase.slice(0, 80)}"`);
 
   // ── Busca pedido ──────────────────────────────────────────────────────────
   const order = await buscarPedidoPendente(db, phone);
-  await logMsg(db, phone, order?.id || null, 'entrada', texto, 'cliente');
+  const logTexto = temImagem ? `[imagem enviada] ${legendaImagem}`.trim() : texto;
+  await logMsg(db, phone, order?.id || null, 'entrada', logTexto, 'cliente');
 
   if (!order) {
     console.log('[Agente] Sem pedido pendente para', phone);
@@ -251,6 +279,15 @@ async function processarMensagem(db, payload) {
   const hoje = new Date(); hoje.setHours(0, 0, 0, 0);
   const dtO  = order.date ? new Date(order.date + 'T00:00:00') : null;
   const dias = dtO && !isNaN(dtO) ? Math.max(0, Math.round((hoje - dtO) / 86400000)) : 0;
+
+  // ── Resposta para comprovante em imagem ──────────────────────────────────
+  if (temImagem) {
+    const resposta = `Recebi a imagem, obrigado ${nome}! 😊\n\nEstou verificando os dados... Para agilizar a confirmação, pode me informar também o *código da transação Pix*? (é o código que começa com "E" no comprovante) 🙏`;
+    console.log('[Agente] Imagem recebida → solicitando código da transação');
+    await logMsg(db, phone, order.id, 'saida', resposta, 'regra');
+    await zapiSend(phone, resposta);
+    return { processado: true, phone, orderId: order.id, fonte: 'regra', resposta };
+  }
 
   // ── 1. Regra determinística ───────────────────────────────────────────────
   const regra = aplicarRegra(texto);
