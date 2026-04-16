@@ -18,21 +18,17 @@ function normPhone(phone) {
 function aplicarRegra(msg) {
   const m = msg.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
 
-  // "já paguei" → NUNCA aceitar como confirmação, sempre pedir comprovante
+  // "já paguei" → pedir comprovante, sem confirmar nada
   if (/j[aá] paguei|j[aá] realizei|fiz o pix|fiz o pagamento|paguei hoje|mandei o pix|realizei/.test(m))
-    return { regra: 'pagou_sem_comprovante', resposta: 'Que ótimo! 😊 Para confirmarmos e liberar seu pedido, preciso do comprovante de pagamento. Pode enviar uma foto ou o código da transação? 🙏' };
+    return { regra: 'pagou_sem_comprovante', resposta: 'Que ótimo! 😊 Pode me enviar o comprovante? Vou encaminhar para nossa equipe verificar e eles te confirmam a quitação assim que possível! 🙏' };
 
-  // Promessa de pagamento → agradecer e definir prazo
+  // Promessa de pagamento
   if (/vou pagar|pago amanh[aã]|pago essa semana|pago na sexta|pago segunda|pago em breve|prometo/.test(m))
-    return { regra: 'promessa', resposta: 'Perfeito! 😊 Anota o Pix para facilitar na hora H. Assim que realizar, me manda o comprovante para eu confirmar na hora! 🙏' };
+    return { regra: 'promessa', resposta: 'Perfeito! 😊 Quando realizar, me manda o comprovante que eu encaminho para a equipe confirmar. Obrigado! 🙏' };
 
-  // Dificuldade financeira → empatia e negociação
+  // Dificuldade financeira → empatia, sem resolver sozinho
   if (/n[aã]o tenho|sem dinheiro|apertado|dificuldade|n[aã]o consigo|t[oô] sem|nao posso/.test(m))
-    return { regra: 'sem_dinheiro', resposta: 'Entendo, sem problema! 😊 Me conta qual data fica melhor pra você e a gente encontra uma solução juntos. O importante é manter a comunicação! 🤝' };
-
-  // Pede a chave Pix → fornecer via IA (que tem o dado no contexto)
-  if (/\bpix\b|qual.*chave|como.*pago|como.*transfer|manda.*pix|qual.*pix|chave.*pix/.test(m))
-    return null; // IA inclui o pix no contexto
+    return { regra: 'sem_dinheiro', resposta: 'Entendo, sem problema! 😊 Me fala qual data fica melhor para você e eu repasso para nossa equipe combinar. O importante é manter a comunicação! 🤝' };
 
   // Confirmações curtas → encerrar amigavelmente
   if (/^(ok|certo|entendi|sim|claro|perfeito|combinado|blz|beleza|t[aá]|ta bom|show|otimo|obrigad)[.!]?\s*$/.test(m))
@@ -49,34 +45,34 @@ async function gerarRespostaIA(nome, valor, pix, dias, mensagem, historico = [])
 
   const ton = dias <= 3 ? 'leve e acolhedor' : dias <= 7 ? 'firme e objetivo' : 'sério mas respeitoso';
 
-  const system = `Você é um assistente especializado em cobranças da empresa *Brownies do Mig*, uma confeitaria artesanal.
-Seu nome é Mig. Você é experiente, amigável e profissional — como um atendente humano de alto nível.
+  const system = `Você é um assistente de cobranças da *Brownie do Mig*, uma confeitaria artesanal.
+Seu nome é Mig. Você é experiente, amigável e profissional.
 
-━━━ DADOS DO CLIENTE ━━━
-Nome: ${nome}
-Valor em aberto: R$ ${valor}
-Chave Pix: ${pix || 'solicitar ao financeiro'}
+━━━ CONTEXTO ━━━
+Cliente: ${nome}
+Valor da conta em aberto: R$ ${valor}
+Chave Pix: ${pix || '(disponível mediante solicitação)'}
 Dias em atraso: ${dias}
-Tom desta conversa: ${ton}
+Tom: ${ton}
 
-━━━ REGRAS INEGOCIÁVEIS ━━━
-1. NUNCA confirme pagamento sem comprovante — palavras como "já paguei" NÃO são prova
-2. Sempre solicite: foto do comprovante OU código/ID da transação Pix
-3. Se receber comprovante em imagem: agradeça, informe que está analisando e peça o código da transação para confirmar manualmente
-4. Jamais seja agressivo, ameaçador ou irônico
-5. Se cliente pedir prazo → acolha, peça data específica, confirme o combinado
-6. Se detectar informação suspeita ou inconsistente → informe que vai verificar e não confirme nada
+━━━ REGRAS ABSOLUTAS ━━━
+1. NUNCA confirme que o pagamento foi recebido — a confirmação é feita EXCLUSIVAMENTE pela equipe da Brownie do Mig após verificação manual
+2. Se cliente disser que pagou → agradeça e peça o comprovante
+3. Se cliente enviar comprovante → agradeça, diga que vai encaminhar para a equipe verificar e que entrarão em contato confirmando a quitação
+4. NUNCA use frases como "pagamento confirmado", "conta quitada", "regularizado" ou qualquer variação
+5. Jamais seja agressivo, irônico ou ameaçador
+6. Se cliente pedir prazo → acolha com empatia, peça uma data específica e diga que vai repassar para a equipe
+7. Use sempre "conta" — nunca "pedido"
 
 ━━━ ESTILO ━━━
-- WhatsApp: direto, no máximo 3 linhas
-- Use emojis com moderação (1-2 por mensagem)
-- Linguagem próxima, mas profissional — não use gírias
-- Sempre assine como: _Brownies do Mig_ 🍫 (apenas no primeiro contato ou quando encerrar conversa)
+- Mensagens curtas, estilo WhatsApp (máximo 3 linhas)
+- Emojis com moderação (1-2 por mensagem)
+- Linguagem próxima mas profissional
 
-━━━ FLUXO DE COMPROVANTE ━━━
-- Cliente diz que pagou → peça comprovante
-- Cliente envia comprovante/foto → "Recebi! Estou verificando os dados... Pode confirmar o código da transação Pix? (começa com E ou começa após 'ID:')"
-- Comprovante confirmado → "Pagamento verificado! ✅ Muito obrigado, ${nome}! Seu pedido está regularizado."
+━━━ EXEMPLOS DE RESPOSTA CORRETA ━━━
+- "já paguei": "Que ótimo, ${nome}! 😊 Pode me enviar o comprovante? Vou encaminhar para nossa equipe e eles te confirmam assim que verificarem! 🙏"
+- Recebeu comprovante: "Recebi! 😊 Vou encaminhar para nossa equipe conferir. Assim que validarem, você recebe a confirmação. Obrigado!"
+- Pede prazo: "Entendido! Me fala qual data fica melhor e eu repasso para a equipe. 🙏"
 
 Responda SOMENTE com o texto da mensagem. Sem aspas, sem prefixo "Mig:", sem explicações.`;
 
@@ -280,10 +276,10 @@ async function processarMensagem(db, payload) {
   const dtO  = order.date ? new Date(order.date + 'T00:00:00') : null;
   const dias = dtO && !isNaN(dtO) ? Math.max(0, Math.round((hoje - dtO) / 86400000)) : 0;
 
-  // ── Resposta para comprovante em imagem ──────────────────────────────────
+  // ── Comprovante em imagem → agradecer e avisar que equipe vai verificar ─────
   if (temImagem) {
-    const resposta = `Recebi a imagem, obrigado ${nome}! 😊\n\nEstou verificando os dados... Para agilizar a confirmação, pode me informar também o *código da transação Pix*? (é o código que começa com "E" no comprovante) 🙏`;
-    console.log('[Agente] Imagem recebida → solicitando código da transação');
+    const resposta = `Recebi o comprovante, obrigado ${nome}! 😊\n\nVou encaminhar para nossa equipe conferir. Assim que validarem, você recebe a confirmação da quitação. 🙏`;
+    console.log('[Agente] Comprovante (imagem) recebido');
     await logMsg(db, phone, order.id, 'saida', resposta, 'regra');
     await zapiSend(phone, resposta);
     return { processado: true, phone, orderId: order.id, fonte: 'regra', resposta };
