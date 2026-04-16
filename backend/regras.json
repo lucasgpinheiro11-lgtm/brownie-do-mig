@@ -1,0 +1,32 @@
+[
+  {
+    "nome": "Já pagou — pede comprovante",
+    "ativa": true,
+    "padrao": "já paguei|ja paguei|já realizei|ja realizei|fiz o pix|fiz o pagamento|paguei hoje|mandei o pix|realizei o pagamento",
+    "resposta": "Que ótimo! 😊 Pode me enviar o comprovante? Vou encaminhar para nossa equipe verificar e eles te confirmam a quitação assim que possível! 🙏"
+  },
+  {
+    "nome": "Promessa de pagamento",
+    "ativa": true,
+    "padrao": "vou pagar|pago amanhã|pago amanha|pago essa semana|pago na sexta|pago segunda|pago em breve|prometo pagar|prometo que pago",
+    "resposta": "Perfeito! 😊 Quando realizar, me manda o comprovante que eu encaminho para a equipe confirmar. Obrigado! 🙏"
+  },
+  {
+    "nome": "Dificuldade financeira",
+    "ativa": true,
+    "padrao": "não tenho|nao tenho|sem dinheiro|apertado|dificuldade|não consigo|nao consigo|tô sem|to sem|não posso|nao posso",
+    "resposta": "Entendo, sem problema! 😊 Me fala qual data fica melhor para você e eu repasso para nossa equipe combinar. O importante é manter a comunicação! 🤝"
+  },
+  {
+    "nome": "Confirmações curtas",
+    "ativa": true,
+    "padrao": "^(ok|certo|entendi|sim|claro|perfeito|combinado|blz|beleza|tá|ta|ta bom|show|ótimo|otimo|obrigado|obrigada)[.!]?\\s*$",
+    "resposta": "Combinado! 😊 Qualquer dúvida pode me chamar."
+  },
+  {
+    "nome": "Exemplo desativado — ajustar data",
+    "ativa": false,
+    "padrao": "posso pagar dia|pago dia|pago no dia",
+    "resposta": "Perfeito! Vou registrar que você vai pagar nessa data e repassar para nossa equipe. 😊🙏"
+  }
+]

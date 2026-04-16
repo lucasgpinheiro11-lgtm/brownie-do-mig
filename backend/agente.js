@@ -1,7 +1,26 @@
 // ── Agente de Cobrança com IA ─────────────────────────────────────────────────
 'use strict';
 
+const fs       = require('fs');
+const path     = require('path');
 const GROQ_URL = 'https://api.groq.com/openai/v1/chat/completions';
+
+// ── Carrega regras customizadas do regras.json ────────────────────────────────
+function carregarRegras() {
+  try {
+    const arquivo = path.join(__dirname, 'regras.json');
+    const dados   = JSON.parse(fs.readFileSync(arquivo, 'utf8'));
+    const ativas  = dados.filter(r => r.ativa !== false);
+    console.log(`[Agente] ${ativas.length} regra(s) carregada(s) de regras.json`);
+    return ativas;
+  } catch (e) {
+    console.warn('[Agente] regras.json não encontrado ou inválido:', e.message);
+    return [];
+  }
+}
+
+// Carregadas uma vez na inicialização
+const REGRAS_CUSTOM = carregarRegras();
 
 // Idempotência: IDs de mensagens já processadas (in-memory)
 const processados = new Set();
@@ -17,6 +36,21 @@ function normPhone(phone) {
 // ── Regras determinísticas (zero custo) ──────────────────────────────────────
 function aplicarRegra(msg) {
   const m = msg.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+
+  // 1️⃣ Regras do regras.json (têm prioridade)
+  for (const regra of REGRAS_CUSTOM) {
+    try {
+      const re = new RegExp(regra.padrao, 'i');
+      if (re.test(m)) {
+        console.log(`[Agente] Regra custom: "${regra.nome}"`);
+        return { regra: regra.nome, resposta: regra.resposta };
+      }
+    } catch (e) {
+      console.warn(`[Agente] Regex inválido na regra "${regra.nome}":`, e.message);
+    }
+  }
+
+  // 2️⃣ Regras fixas de segurança (fallback se não coberto pelo JSON)
 
   // "já paguei" → pedir comprovante, sem confirmar nada
   if (/j[aá] paguei|j[aá] realizei|fiz o pix|fiz o pagamento|paguei hoje|mandei o pix|realizei/.test(m))
