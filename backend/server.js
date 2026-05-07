@@ -4,6 +4,8 @@ const cors     = require('cors');
 const jwt      = require('jsonwebtoken');
 const cobranca = require('./cobranca.js');
 const agente   = require('./agente.js');
+const { iniciarScheduler, rodarFluxos } = require('./src/services/scheduler');
+const { retomarExecucoesPendentes }      = require('./src/services/flowEngine');
 
 // ── AUTH ──────────────────────────────────────────────────────────────────────
 const JWT_SECRET  = process.env.JWT_SECRET  || 'brownie-do-mig-secret-2025';
@@ -509,6 +511,116 @@ app.get('/api/cobrancas/logs', async (_, res) => {
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
+// ── FLUXOS DE COBRANÇA ────────────────────────────────────────────────────────
+app.get('/api/flows', async (_, res) => {
+  try {
+    const { rows } = await db.execute('SELECT * FROM flows ORDER BY criado_em DESC');
+    res.json(rows.map(f => ({ ...f, gatilho: JSON.parse(f.gatilho), nos: JSON.parse(f.nos) })));
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+app.post('/api/flows', async (req, res) => {
+  try {
+    const { nome, gatilho, nos } = req.body;
+    if (!nome) return res.status(400).json({ error: 'Nome obrigatório' });
+    const id  = uid('fl');
+    const now = new Date().toISOString();
+    await db.execute({
+      sql:  `INSERT INTO flows (id,nome,ativo,gatilho,nos,criado_em,atualizado_em) VALUES (?,?,1,?,?,?,?)`,
+      args: [id, nome, JSON.stringify(gatilho || {}), JSON.stringify(nos || []), now, now],
+    });
+    const { rows: [flow] } = await db.execute({ sql: 'SELECT * FROM flows WHERE id=?', args: [id] });
+    res.json({ ...flow, gatilho: JSON.parse(flow.gatilho), nos: JSON.parse(flow.nos) });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+app.put('/api/flows/:id', async (req, res) => {
+  try {
+    const { rows: [f] } = await db.execute({ sql: 'SELECT * FROM flows WHERE id=?', args: [req.params.id] });
+    if (!f) return res.status(404).json({ error: 'Não encontrado' });
+    const { nome, gatilho, nos } = req.body;
+    const now = new Date().toISOString();
+    await db.execute({
+      sql:  `UPDATE flows SET nome=?,gatilho=?,nos=?,atualizado_em=? WHERE id=?`,
+      args: [nome ?? f.nome, JSON.stringify(gatilho ?? JSON.parse(f.gatilho)), JSON.stringify(nos ?? JSON.parse(f.nos)), now, req.params.id],
+    });
+    const { rows: [flow] } = await db.execute({ sql: 'SELECT * FROM flows WHERE id=?', args: [req.params.id] });
+    res.json({ ...flow, gatilho: JSON.parse(flow.gatilho), nos: JSON.parse(flow.nos) });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+app.delete('/api/flows/:id', async (req, res) => {
+  try {
+    await db.execute({ sql: 'DELETE FROM flows WHERE id=?', args: [req.params.id] });
+    res.json({ ok: true });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+app.patch('/api/flows/:id/toggle', async (req, res) => {
+  try {
+    const { rows: [f] } = await db.execute({ sql: 'SELECT * FROM flows WHERE id=?', args: [req.params.id] });
+    if (!f) return res.status(404).json({ error: 'Não encontrado' });
+    const novoAtivo = f.ativo ? 0 : 1;
+    await db.execute({ sql: 'UPDATE flows SET ativo=? WHERE id=?', args: [novoAtivo, req.params.id] });
+    res.json({ ok: true, ativo: !!novoAtivo });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+app.get('/api/flows/execucoes', async (_, res) => {
+  try {
+    const { rows } = await db.execute(`
+      SELECT fe.*, f.nome as flow_nome, o.name as card_nome
+      FROM flow_executions fe
+      LEFT JOIN flows f ON f.id = fe.flow_id
+      LEFT JOIN orders o ON o.id = fe.card_id
+      ORDER BY fe.iniciado_em DESC LIMIT 200
+    `);
+    res.json(rows.map(r => ({ ...r, historico: JSON.parse(r.historico || '[]') })));
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+app.post('/api/flows/executar-agora', async (req, res) => {
+  try {
+    await rodarFluxos(db);
+    res.json({ ok: true, msg: 'Rodada de fluxos executada' });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// ── WEBHOOK EVOLUTION API (público — sem auth) ────────────────────────────────
+app.post('/api/webhook/evolution', async (req, res) => {
+  res.sendStatus(200);
+  const { event, data } = req.body || {};
+  if (event !== 'messages.upsert' || !data) return;
+  if (data.key?.fromMe) return;
+
+  try {
+    const phone   = (data.key?.remoteJid || '').replace('@s.whatsapp.net', '').replace(/\D/g, '');
+    const message = data.message?.conversation || data.message?.extendedTextMessage?.text || '';
+    if (!phone || !message) return;
+
+    // Marca cliente como respondeu nas execuções ativas
+    const { rows: execucoes } = await db.execute({
+      sql:  `SELECT fe.id FROM flow_executions fe JOIN orders o ON o.id = fe.card_id WHERE o.phone LIKE ? AND fe.status='em_andamento'`,
+      args: [`%${phone.slice(-8)}`],
+    });
+    for (const exec of execucoes) {
+      const { rows: [e] } = await db.execute({ sql: 'SELECT * FROM flow_executions WHERE id=?', args: [exec.id] });
+      const hist = JSON.parse(e?.historico || '[]');
+      hist.push({ no_id: 'webhook', executado_em: new Date().toISOString(), resultado: 'cliente_respondeu', detalhes: { mensagem: message } });
+      await db.execute({ sql: `UPDATE flow_executions SET historico=? WHERE id=?`, args: [JSON.stringify(hist), exec.id] });
+    }
+
+    // Atualiza flag respondeu no order para uso em nós de condição
+    await db.execute({
+      sql:  `UPDATE orders SET notes=notes WHERE phone LIKE ?`,
+      args: [`%${phone.slice(-8)}`],
+    });
+    console.log(`[Webhook Evolution] Resposta recebida de ${phone}`);
+  } catch (e) {
+    console.error('[Webhook Evolution] Erro:', e.message);
+  }
+});
+
 // ── RAIZ ──────────────────────────────────────────────────────────────────────
 app.get('/', (_, res) => res.send('🍫 API Brownie do Mig — backend online'));
 
@@ -526,6 +638,8 @@ async function initDB() {
     { sql: `CREATE TABLE IF NOT EXISTS cobranca_templates (id TEXT PRIMARY KEY, status TEXT NOT NULL, dias_min INTEGER NOT NULL DEFAULT 1, dias_max INTEGER, mensagem TEXT NOT NULL DEFAULT '')` },
     { sql: `CREATE TABLE IF NOT EXISTS mensagens_wa (id TEXT PRIMARY KEY, phone TEXT NOT NULL, order_id TEXT, direcao TEXT NOT NULL, mensagem TEXT NOT NULL, fonte TEXT DEFAULT 'sistema', created_at INTEGER NOT NULL)` },
     { sql: `CREATE TABLE IF NOT EXISTS conversas (phone TEXT PRIMARY KEY, order_id TEXT, pausar_automacao INTEGER DEFAULT 0, ultima_interacao INTEGER, status_conversa TEXT DEFAULT 'ativo')` },
+    { sql: `CREATE TABLE IF NOT EXISTS flows (id TEXT PRIMARY KEY, nome TEXT NOT NULL, ativo INTEGER DEFAULT 1, gatilho TEXT NOT NULL DEFAULT '{}', nos TEXT NOT NULL DEFAULT '[]', criado_em TEXT NOT NULL, atualizado_em TEXT NOT NULL)` },
+    { sql: `CREATE TABLE IF NOT EXISTS flow_executions (id TEXT PRIMARY KEY, flow_id TEXT NOT NULL, card_id TEXT NOT NULL, cliente_nome TEXT DEFAULT '', cliente_contato TEXT DEFAULT '', no_atual TEXT DEFAULT '', status TEXT DEFAULT 'em_andamento', historico TEXT NOT NULL DEFAULT '[]', iniciado_em TEXT NOT NULL, proximo_disparo TEXT)` },
   ], 'write');
 
   const { rows } = await db.execute('SELECT COUNT(*) as c FROM insumos');
@@ -546,6 +660,7 @@ async function initDB() {
 
 initDB()
   .then(() => {
+    iniciarScheduler(db);
     app.listen(PORT, () => {
       console.log(`\n🍫 Brownie do Mig — Backend em http://localhost:${PORT}\n`);
     });

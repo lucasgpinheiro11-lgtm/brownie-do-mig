@@ -8,7 +8,8 @@ import { Kanban } from './pages/Kanban.jsx';
 import { Insumos } from './pages/Insumos.jsx';
 import { FluxoCaixa } from './pages/FluxoCaixa.jsx';
 import { Funil } from './pages/Funil.jsx';
-import { Relatorios } from './pages/Relatorios.jsx';
+import { Relatorios }      from './pages/Relatorios.jsx';
+import { FluxosCobranca } from './pages/FluxosCobranca.jsx';
 
 export default function App() {
   const [tab, setTab] = useState('dashboard');
@@ -39,10 +40,11 @@ export default function App() {
 
   const pages = {
     dashboard: <Dashboard />,
-    kanban: <Kanban />,
-    insumos: <Insumos />,
-    fluxo: <FluxoCaixa />,
-    funil: <Funil />,
+    kanban:    <Kanban />,
+    fluxos:    <FluxosCobranca />,
+    insumos:   <Insumos />,
+    fluxo:     <FluxoCaixa />,
+    funil:     <Funil />,
     relatorios: <Relatorios />,
   };
 

@@ -7,6 +7,7 @@ import * as api from '../lib/api.js';
 const TABS = [
   { id: 'dashboard',  label: '📊 Dashboard' },
   { id: 'kanban',     label: '📋 Pedidos' },
+  { id: 'fluxos',     label: '🔀 Fluxos' },
   { id: 'insumos',    label: '🛒 Insumos' },
   { id: 'fluxo',      label: '💰 Fluxo' },
   { id: 'funil',      label: '🎯 Funil' },
