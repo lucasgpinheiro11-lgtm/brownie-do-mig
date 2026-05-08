@@ -1,8 +1,6 @@
-// ── Serviço de Cobranças via Z-API ────────────────────────────────────────────
-const ZAPI_INSTANCE     = process.env.ZAPI_INSTANCE_ID;
-const ZAPI_TOKEN        = process.env.ZAPI_TOKEN;
-const ZAPI_CLIENT_TOKEN = process.env.ZAPI_CLIENT_TOKEN;
-const ZAPI_URL          = `https://api.z-api.io/instances/${ZAPI_INSTANCE}/token/${ZAPI_TOKEN}/send-text`;
+// ── Serviço de Cobranças via ZAP API ─────────────────────────────────────────
+const ZAP_TOKEN    = () => process.env.ZAP_API_TOKEN;
+const ZAP_INSTANCE = () => process.env.ZAP_API_INSTANCE;
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 function uid() { return 'cb' + Date.now() + Math.random().toString(36).slice(2, 5); }
@@ -68,20 +66,23 @@ function interpolate(mensagem, order, dias, pixKey, sales = []) {
     .replace(/\{extrato\}/gi, extrato);
 }
 
-// ── Z-API send ────────────────────────────────────────────────────────────────
+// ── ZAP API send ──────────────────────────────────────────────────────────────
 async function sendZapi(phone, message) {
-  if (!ZAPI_INSTANCE || !ZAPI_TOKEN)
-    throw new Error('Credenciais Z-API não configuradas (ZAPI_INSTANCE_ID / ZAPI_TOKEN)');
-  const headers = { 'Content-Type': 'application/json' };
-  if (ZAPI_CLIENT_TOKEN) headers['Client-Token'] = ZAPI_CLIENT_TOKEN;
-  const payload = { phone, message };
-  console.log('Payload Z-API:', JSON.stringify(payload));
-  const res     = await fetch(ZAPI_URL, { method: 'POST', headers, body: JSON.stringify(payload) });
+  if (!ZAP_TOKEN() || !ZAP_INSTANCE())
+    throw new Error('Credenciais ZAP API não configuradas (ZAP_API_TOKEN / ZAP_API_INSTANCE)');
+  const url     = `https://api.zap-api.tech/v1/instances/${ZAP_INSTANCE()}/messages`;
+  const payload = { phone, type: 'text', text: message };
+  console.log('Payload ZAP API:', JSON.stringify(payload));
+  const res     = await fetch(url, {
+    method:  'POST',
+    headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${ZAP_TOKEN()}` },
+    body:    JSON.stringify(payload),
+  });
   const rawText = await res.text();
-  console.log('Resposta Z-API:', rawText);
+  console.log('Resposta ZAP API:', rawText);
   if (!res.ok) {
     const err = JSON.parse(rawText || '{}');
-    throw new Error(err.message || err.error || `Z-API erro ${res.status}`);
+    throw new Error(err.message || err.error || `ZAP API erro ${res.status}`);
   }
   return JSON.parse(rawText);
 }
