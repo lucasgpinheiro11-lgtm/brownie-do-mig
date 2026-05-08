@@ -7,8 +7,12 @@ function uid() { return 'cb' + Date.now() + Math.random().toString(36).slice(2, 
 function todayStr() { return new Date().toISOString().split('T')[0]; }
 
 function formatPhone(phone) {
-  const d = (phone || '').replace(/\D/g, '').replace(/^0/, '').replace(/^55/, '');
-  return d ? `55${d}` : null;
+  let d = (phone || '').replace(/\D/g, '').replace(/^0/, '');
+  if (d.startsWith('55')) d = d.slice(2);
+  if (!d) return null;
+  // Número com DDD de 10 dígitos (sem o 9) → adiciona 9 após DDD
+  if (d.length === 10) d = d.slice(0, 2) + '9' + d.slice(2);
+  return `55${d}`;
 }
 
 function daysPast(dateStr) {
