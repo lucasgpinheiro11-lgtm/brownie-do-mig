@@ -2,16 +2,14 @@
 
 const axios = require('axios');
 
-const evolutionClient = axios.create({
-  baseURL: process.env.EVOLUTION_API_URL,
-  headers: {
-    'Content-Type': 'application/json',
-    'apikey': process.env.EVOLUTION_API_KEY,
-  },
+const zapClient = axios.create({
+  baseURL: 'https://api.zap-api.tech/v1',
+  headers: { 'Content-Type': 'application/json' },
   timeout: 15000,
 });
 
-const INSTANCE = () => process.env.EVOLUTION_INSTANCE;
+function token() { return process.env.ZAP_API_TOKEN; }
+function instanceId() { return process.env.ZAP_API_INSTANCE; }
 
 function formatPhone(phone) {
   const digits = String(phone).replace(/\D/g, '');
@@ -19,19 +17,19 @@ function formatPhone(phone) {
 }
 
 async function sendText(phone, text) {
-  const number = formatPhone(phone);
-  const { data } = await evolutionClient.post(
-    `/message/sendText/${INSTANCE()}`,
-    { number, text, options: { delay: 1200 } }
+  const { data } = await zapClient.post(
+    `/instances/${instanceId()}/messages`,
+    { phone: formatPhone(phone), type: 'text', text },
+    { headers: { Authorization: `Bearer ${token()}` } }
   );
   return data;
 }
 
 async function sendMedia(phone, mediaUrl, caption = '') {
-  const number = formatPhone(phone);
-  const { data } = await evolutionClient.post(
-    `/message/sendMedia/${INSTANCE()}`,
-    { number, mediatype: 'image', media: mediaUrl, caption }
+  const { data } = await zapClient.post(
+    `/instances/${instanceId()}/messages`,
+    { phone: formatPhone(phone), type: 'image', url: mediaUrl, caption },
+    { headers: { Authorization: `Bearer ${token()}` } }
   );
   return data;
 }
