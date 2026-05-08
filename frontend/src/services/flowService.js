@@ -1,4 +1,4 @@
-const BASE = import.meta.env.VITE_API_URL || 'http://localhost:3001';
+const BASE = (import.meta.env.VITE_API_URL || '/api').replace(/\/$/, '');
 
 function headers() {
   const token = localStorage.getItem('mg_token');
@@ -19,11 +19,11 @@ async function req(method, path, body) {
 }
 
 export const flowService = {
-  listar:        ()           => req('GET',    '/api/flows'),
-  criar:         (flow)       => req('POST',   '/api/flows', flow),
-  atualizar:     (id, flow)   => req('PUT',    `/api/flows/${id}`, flow),
-  deletar:       (id)         => req('DELETE', `/api/flows/${id}`),
-  toggle:        (id)         => req('PATCH',  `/api/flows/${id}/toggle`),
-  execucoes:     ()           => req('GET',    '/api/flows/execucoes'),
-  executarAgora: ()           => req('POST',   '/api/flows/executar-agora'),
+  listar:        ()           => req('GET',    '/flows'),
+  criar:         (flow)       => req('POST',   '/flows', flow),
+  atualizar:     (id, flow)   => req('PUT',    `/flows/${id}`, flow),
+  deletar:       (id)         => req('DELETE', `/flows/${id}`),
+  toggle:        (id)         => req('PATCH',  `/flows/${id}/toggle`),
+  execucoes:     ()           => req('GET',    '/flows/execucoes'),
+  executarAgora: ()           => req('POST',   '/flows/executar-agora'),
 };
