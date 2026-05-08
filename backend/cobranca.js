@@ -71,7 +71,7 @@ async function sendZapi(phone, message) {
   if (!ZAP_TOKEN() || !ZAP_INSTANCE())
     throw new Error('Credenciais ZAP API não configuradas (ZAP_API_TOKEN / ZAP_API_INSTANCE)');
   const url     = `https://api.zap-api.tech/v1/instances/${ZAP_INSTANCE()}/send`;
-  const payload = { phone, text: message };
+  const payload = { phone, type: 'text', body: message };
   console.log('Payload ZAP API:', JSON.stringify(payload));
   const res     = await fetch(url, {
     method:  'POST',

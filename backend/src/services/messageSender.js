@@ -19,7 +19,7 @@ function formatPhone(phone) {
 async function sendText(phone, text) {
   const { data } = await zapClient.post(
     `/instances/${instanceId()}/send`,
-    { phone: formatPhone(phone), text },
+    { phone: formatPhone(phone), type: 'text', body: text },
     { headers: { Authorization: `Bearer ${token()}` } }
   );
   return data;
