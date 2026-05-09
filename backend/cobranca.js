@@ -10,8 +10,6 @@ function formatPhone(phone) {
   let d = (phone || '').replace(/\D/g, '').replace(/^0/, '');
   if (d.startsWith('55')) d = d.slice(2);
   if (!d) return null;
-  // Número com DDD de 10 dígitos (sem o 9) → adiciona 9 após DDD
-  if (d.length === 10) d = d.slice(0, 2) + '9' + d.slice(2);
   return `55${d}`;
 }
 
