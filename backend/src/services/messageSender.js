@@ -12,10 +12,8 @@ function token() { return process.env.ZAP_API_TOKEN; }
 function instanceId() { return process.env.ZAP_API_INSTANCE; }
 
 function formatPhone(phone) {
-  let digits = String(phone).replace(/\D/g, '');
-  // Remove DDI 55 se já tiver para reprocessar
-  if (digits.startsWith('55') && digits.length > 12) digits = digits.slice(2);
-  // Números brasileiros com DDD: 10 dígitos (sem o 9) → adiciona 9 após DDD
+  let digits = String(phone).replace(/\D/g, '').replace(/^0/, '');
+  if (digits.startsWith('55')) digits = digits.slice(2);
   if (digits.length === 10) digits = digits.slice(0, 2) + '9' + digits.slice(2);
   return `55${digits}`;
 }
