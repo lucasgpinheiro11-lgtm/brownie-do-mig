@@ -14,6 +14,7 @@ function instanceId() { return process.env.ZAP_API_INSTANCE; }
 function formatPhone(phone) {
   let digits = String(phone).replace(/\D/g, '').replace(/^0/, '');
   if (digits.startsWith('55')) digits = digits.slice(2);
+  if (digits.length === 11) digits = digits.slice(0, 2) + digits.slice(3); // remove o 9 após DDD
   return `55${digits}`;
 }
 

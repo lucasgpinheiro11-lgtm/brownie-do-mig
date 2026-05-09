@@ -10,6 +10,7 @@ function formatPhone(phone) {
   let d = (phone || '').replace(/\D/g, '').replace(/^0/, '');
   if (d.startsWith('55')) d = d.slice(2);
   if (!d) return null;
+  if (d.length === 11) d = d.slice(0, 2) + d.slice(3); // remove o 9 após DDD
   return `55${d}`;
 }
 
