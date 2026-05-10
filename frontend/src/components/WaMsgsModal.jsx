@@ -122,6 +122,7 @@ function TabManual({ tab, msgs, setMsgs, config }) {
 function TabAuto({ config, toast }) {
   const [templates, setTemplates] = useState([]);
   const [form,      setForm]      = useState({ ...EMPTY_FORM });
+  const [editingId, setEditingId] = useState(null);
   const [saving,    setSaving]    = useState(false);
   const [showForm,  setShowForm]  = useState(false);
 
@@ -135,24 +136,47 @@ function TabAuto({ config, toast }) {
     setForm(f => ({ ...f, mensagem: f.mensagem + v }));
   }
 
+  function startEdit(t) {
+    setForm({
+      status:  t.status,
+      dias_min: t.dias_min,
+      dias_max: t.dias_max ?? '',
+      sem_max:  t.dias_max == null,
+      mensagem: t.mensagem,
+    });
+    setEditingId(t.id);
+    setShowForm(true);
+  }
+
+  function cancelForm() {
+    setShowForm(false);
+    setEditingId(null);
+    setForm({ ...EMPTY_FORM });
+  }
+
   async function save() {
     if (!form.mensagem.trim()) { toast('⚠️ Mensagem obrigatória'); return; }
     if (!form.dias_min || +form.dias_min < 1) { toast('⚠️ Dias mínimo deve ser ≥ 1'); return; }
     if (!form.sem_max && form.dias_max !== '' && +form.dias_max < +form.dias_min) {
       toast('⚠️ Dias máximo deve ser ≥ dias mínimo'); return;
     }
+    const payload = {
+      status:   form.status,
+      dias_min: +form.dias_min,
+      dias_max: form.sem_max ? null : (form.dias_max !== '' ? +form.dias_max : null),
+      mensagem: form.mensagem.trim(),
+    };
     setSaving(true);
     try {
-      await api.createCobrancaTemplate({
-        status:   form.status,
-        dias_min: +form.dias_min,
-        dias_max: form.sem_max ? null : (form.dias_max !== '' ? +form.dias_max : null),
-        mensagem: form.mensagem.trim(),
-      });
+      if (editingId) {
+        await api.updateCobrancaTemplate(editingId, payload);
+        toast('✅ Regra atualizada!');
+      } else {
+        await api.createCobrancaTemplate(payload);
+        toast('✅ Regra criada!');
+      }
       await load();
-      setForm({ ...EMPTY_FORM });
-      setShowForm(false);
-      toast('✅ Regra criada!');
+      cancelForm();
     } catch (e) {
       toast('❌ ' + e.message);
     } finally { setSaving(false); }
@@ -199,6 +223,7 @@ function TabAuto({ config, toast }) {
                     {t.mensagem.length > 120 ? t.mensagem.slice(0, 120) + '…' : t.mensagem}
                   </div>
                 </div>
+                <button className="btn-xs" style={{ background: 'var(--cd)', color: 'var(--bd)', border: '1px solid var(--cb)', flexShrink: 0, marginTop: 2 }} onClick={() => startEdit(t)}>✏️</button>
                 <button className="btn-xs" style={{ background: 'var(--rl)', color: 'var(--red)', border: 'none', flexShrink: 0, marginTop: 2 }} onClick={() => remove(t.id)}>🗑</button>
               </div>
             ))
@@ -208,12 +233,12 @@ function TabAuto({ config, toast }) {
 
       {/* Botão / Formulário */}
       {!showForm ? (
-        <button className="btn btn-outline btn-sm" style={{ width: '100%', marginTop: 4 }} onClick={() => setShowForm(true)}>
+        <button className="btn btn-outline btn-sm" style={{ width: '100%', marginTop: 4 }} onClick={() => { setEditingId(null); setForm({ ...EMPTY_FORM }); setShowForm(true); }}>
           + Nova Regra
         </button>
       ) : (
         <div style={{ border: '1.5px solid var(--gold)', borderRadius: 'var(--r)', padding: 14, marginTop: 8 }}>
-          <div style={{ fontSize: 12, fontWeight: 700, color: 'var(--bd)', marginBottom: 12 }}>Nova Regra de Cobrança</div>
+          <div style={{ fontSize: 12, fontWeight: 700, color: 'var(--bd)', marginBottom: 12 }}>{editingId ? 'Editar Regra' : 'Nova Regra de Cobrança'}</div>
 
           <div className="frow" style={{ gap: 8 }}>
             <div className="fg">
@@ -269,8 +294,8 @@ function TabAuto({ config, toast }) {
           )}
 
           <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
-            <button className="btn btn-outline btn-sm" onClick={() => { setShowForm(false); setForm({ ...EMPTY_FORM }); }}>Cancelar</button>
-            <button className="btn btn-gold btn-sm" onClick={save} disabled={saving}>{saving ? 'Salvando…' : '💾 Salvar Regra'}</button>
+            <button className="btn btn-outline btn-sm" onClick={cancelForm}>Cancelar</button>
+            <button className="btn btn-gold btn-sm" onClick={save} disabled={saving}>{saving ? 'Salvando…' : editingId ? '💾 Atualizar Regra' : '💾 Salvar Regra'}</button>
           </div>
         </div>
       )}

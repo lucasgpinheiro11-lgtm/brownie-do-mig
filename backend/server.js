@@ -483,6 +483,15 @@ app.post('/api/cobranca-templates', async (req, res) => {
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
+app.put('/api/cobranca-templates/:id', auth, async (req, res) => {
+  const { status, dias_min, dias_max, mensagem } = req.body;
+  try {
+    await db.execute({ sql: `UPDATE cobranca_templates SET status=?,dias_min=?,dias_max=?,mensagem=? WHERE id=?`, args: [status, +dias_min, dias_max != null ? +dias_max : null, mensagem, req.params.id] });
+    const { rows } = await db.execute({ sql: 'SELECT * FROM cobranca_templates WHERE id=?', args: [req.params.id] });
+    res.json(rows[0]);
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
 app.delete('/api/cobranca-templates/:id', async (req, res) => {
   try { await db.execute({ sql: 'DELETE FROM cobranca_templates WHERE id=?', args: [req.params.id] }); res.json({ ok: true }); }
   catch (e) { res.status(500).json({ error: e.message }); }

@@ -72,6 +72,7 @@ export const getCobrancas = ()        => req('/cobrancas/logs');
 // Templates de cobrança
 export const getCobrancaTemplates    = ()       => req('/cobranca-templates');
 export const createCobrancaTemplate  = (data)   => req('/cobranca-templates',      { method:'POST',   body: data });
+export const updateCobrancaTemplate  = (id, data) => req(`/cobranca-templates/${id}`, { method:'PUT',    body: data });
 export const deleteCobrancaTemplate  = (id)     => req(`/cobranca-templates/${id}`, { method:'DELETE' });
 
 // Conversas (agente IA)
